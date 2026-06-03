@@ -5,8 +5,8 @@ import { Preferences } from '@capacitor/preferences';
 /**
  * Register a new farmer and save the JWT token
 //  */
-const API_BASE = "https://gau-netra.onrender.com"
-// const API_BASE = import.meta.env.VITE_SERVER_LINK;
+// const API_BASE = "https://gau-netra.onrender.com"
+const API_BASE = import.meta.env.VITE_SERVER_LINK;
 export const registerFarmerAPI = async (formData: { name: string; phone: string; village: string; state: string; district: string; pincode?: string }) => {
     try {
         const response = await axios.post(`${API_BASE}/api/auth/register`, formData);

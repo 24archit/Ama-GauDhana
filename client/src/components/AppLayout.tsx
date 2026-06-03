@@ -142,7 +142,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                             />
                         </Box>
                         <Stack direction="column">
-                            <Typography variant="h6" sx={{ lineHeight: 1.1 }}>Ama Gau-Dhana</Typography>
+                            <Typography variant="h6" sx={{ lineHeight: 1.1 }}>Ama Gaudhana</Typography>
                             <Typography variant="caption" sx={{ opacity: 0.9, fontWeight: 500, fontSize: '0.65rem', mt: 0.5, bgcolor: 'rgba(255,255,255,0.2)', px: 0.8, py: 0.2, borderRadius: 1, display: 'inline-block', width: 'fit-content' }}>
                                 GOVT. OF ODISHA
                             </Typography>
@@ -174,7 +174,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                             <Box component="img" src="/logo.png" alt="Logo" sx={{ width: 40, height: 40, objectFit: 'contain' }} />
                         </Box>
                         <Box>
-                            <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.1 }}>Ama Gau-Dhana</Typography>
+                            <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.1 }}>Ama Gaudhana</Typography>
                             <Typography variant="caption" sx={{ opacity: 0.9 }}>GOVT. OF ODISHA</Typography>
                         </Box>
                     </Box>
