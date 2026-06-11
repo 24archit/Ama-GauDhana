@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 import { getMyCattleAPI } from '../apis/apis';
-import { getImageUrl } from '../utils/imageUtils';
+import { getImageUrl } from '@ama-gau-dhana/shared';
 
 interface CowListSummary {
     _id: string;

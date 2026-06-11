@@ -5,11 +5,10 @@ import { Preferences } from '@capacitor/preferences';
 /**
  * Register a new farmer and save the JWT token
 //  */
-// const API_BASE = "https://gau-netra.onrender.com"
-const API_BASE = import.meta.env.VITE_SERVER_LINK;
+import { API_BASE } from '@ama-gau-dhana/shared';
 export const registerFarmerAPI = async (formData: { name: string; phone: string; village: string; state: string; district: string; pincode?: string }) => {
     try {
-        const response = await axios.post(`${API_BASE}/api/auth/register`, formData);
+        const response = await axios.post(`${API_BASE}/api/farmer/auth/register`, formData);
 
         const data = response.data;
 
@@ -35,22 +34,22 @@ export const registerFarmerAPI = async (formData: { name: string; phone: string;
  * Location APIs
  */
 export const getStatesAPI = async () => {
-    const response = await axios.get(`${API_BASE}/api/location/states`);
+    const response = await axios.get(`${API_BASE}/api/farmer/location/states`);
     return response.data;
 };
 
 export const getDistrictsAPI = async (state: string) => {
-    const response = await axios.get(`${API_BASE}/api/location/districts`, { params: { state } });
+    const response = await axios.get(`${API_BASE}/api/farmer/location/districts`, { params: { state } });
     return response.data;
 };
 
 export const getBlocksAPI = async (district: string) => {
-    const response = await axios.get(`${API_BASE}/api/location/blocks`, { params: { district } });
+    const response = await axios.get(`${API_BASE}/api/farmer/location/blocks`, { params: { district } });
     return response.data;
 };
 
 export const getVillagesAPI = async (block: string) => {
-    const response = await axios.get(`${API_BASE}/api/location/villages`, { params: { block } });
+    const response = await axios.get(`${API_BASE}/api/farmer/location/villages`, { params: { block } });
     return response.data;
 };
 
@@ -77,7 +76,7 @@ export const getMyCattleAPI = async ({ pageParam = 1, search = '', limit = 10 } 
         if (!token) throw new Error('Not authenticated');
 
         try {
-            const response = await axios.get(`${API_BASE}/api/cattle`, {
+            const response = await axios.get(`${API_BASE}/api/farmer/cattle`, {
                 headers: { Authorization: `Bearer ${token}` },
                 params: { page: pageParam, limit, search }
             });
@@ -119,7 +118,7 @@ export const deleteCowAPI = async (cowId: string) => {
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) throw new Error('Not authenticated');
 
-        const response = await axios.delete(`${API_BASE}/api/cattle/${cowId}`, {
+        const response = await axios.delete(`${API_BASE}/api/farmer/cattle/${cowId}`, {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -144,7 +143,7 @@ export const getCowProfileAPI = async (cowId: string) => {
     if (!token) throw new Error('Not authenticated');
 
     try {
-        const response = await axios.get(`${API_BASE}/api/cattle/${cowId}`, {
+        const response = await axios.get(`${API_BASE}/api/farmer/cattle/${cowId}`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -179,7 +178,7 @@ export const registerCowAPI = async (cowData: Record<string, any>, signal?: Abor
             formData.append(key, cowData[key]);
         });
 
-        const response = await axios.post(`${API_BASE}/api/cattle`, formData, {
+        const response = await axios.post(`${API_BASE}/api/farmer/cattle`, formData, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
@@ -208,7 +207,7 @@ export const registerCowAPI = async (cowData: Record<string, any>, signal?: Abor
  */
 export const loginFarmerAPI = async (phone: string) => {
     try {
-        const response = await axios.post(`${API_BASE}/api/auth/login`, { phone });
+        const response = await axios.post(`${API_BASE}/api/farmer/auth/login`, { phone });
 
         const data = response.data;
 
@@ -242,7 +241,7 @@ export const searchCowAPI = async (searchData: { faceImage: string; muzzleImage:
         formData.append('faceImage', searchData.faceImage);
         formData.append('muzzleImage', searchData.muzzleImage);
 
-        const response = await axios.post(`${API_BASE}/api/cattle/search`, formData, {
+        const response = await axios.post(`${API_BASE}/api/farmer/cattle/search`, formData, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
@@ -270,7 +269,7 @@ export const getUserProfileAPI = async () => {
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) throw new Error('Not authenticated');
 
-        const response = await axios.get(`${API_BASE}/api/user/profile`, {
+        const response = await axios.get(`${API_BASE}/api/farmer/user/profile`, {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -292,7 +291,7 @@ export const updateUserProfileAPI = async (profileData: Record<string, unknown>)
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) throw new Error('Not authenticated');
 
-        const response = await axios.put(`${API_BASE}/api/user/profile`, profileData, {
+        const response = await axios.put(`${API_BASE}/api/farmer/user/profile`, profileData, {
             headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -324,7 +323,7 @@ export const logoutUserAPI = async () => {
         const { value: token } = await Preferences.get({ key: 'jwt_token' });
         if (!token) return { success: true };
 
-        const response = await axios.post(`${API_BASE}/api/user/logout`, {}, {
+        const response = await axios.post(`${API_BASE}/api/farmer/user/logout`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         });
 

@@ -44,7 +44,7 @@ interface CowProfileData {
 }
 import { useNavigate, useParams } from 'react-router-dom';
 import { getCowProfileAPI } from '../apis/apis';
-import { getImageUrl } from '../utils/imageUtils';
+import { getImageUrl } from '@ama-gau-dhana/shared';
 import { CircularProgress } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 

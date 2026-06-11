@@ -1,0 +1,49 @@
+/* Prevent any page-level horizontal scrolling */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  background-color: transparent;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  background: transparent;
+  background-color: transparent;
+}
+
+html.camera-preview-active,
+body.camera-preview-active {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+body.camera-preview-active #root {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.camera-preview-dialog,
+.camera-preview-dialog .MuiDialog-container,
+.camera-preview-dialog .MuiDialog-paper,
+.camera-preview-dialog .MuiBackdrop-root {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+.camera-preview-dialog .MuiDialog-paper {
+    box-shadow: none !important;
+}
+
+#camera-preview-host {
+    background: transparent !important;
+    background-color: transparent !important;
+}

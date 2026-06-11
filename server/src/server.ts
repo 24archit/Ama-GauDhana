@@ -7,10 +7,17 @@ import path from "path";
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import authRoutes from './routes/auth';
-import cattleRoutes from './routes/cattle';
-import locationRoutes from './routes/location';
-import userRoutes from './routes/user';
+import authRoutes from './routes/farmer/auth';
+import cattleRoutes from './routes/farmer/cattle';
+import locationRoutes from './routes/farmer/location';
+import userRoutes from './routes/farmer/user';
+
+// Admin Routes
+import adminAuthRoutes from './routes/admin/auth';
+import adminCattleRoutes from './routes/admin/cattle';
+import adminDisputeRoutes from './routes/admin/disputes';
+import adminAnalyticsRoutes from './routes/admin/analytics';
+import adminUserRoutes from './routes/admin/user';
 
 if (!process.env.JWT_SECRET || !process.env.MONGO_URI) {
   console.error("FATAL ERROR: Missing env secrets.");
@@ -26,7 +33,8 @@ const allowedOrigins = [
   'capacitor://localhost',
   'http://localhost',
   'https://localhost',
-  process.env.CLIENT_LINK || ''
+  process.env.CLIENT_LINK || '',
+  process.env.ADMIN_CLIENT_LINK || ''
 ];
 
 const corsOptions = {
@@ -81,10 +89,17 @@ const authLimiter = rateLimit({
 connectDB();
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/cattle', cattleRoutes);
-app.use('/api/location', locationRoutes);
-app.use('/api/user', userRoutes);
+app.use('/api/farmer/auth', authLimiter, authRoutes);
+app.use('/api/farmer/cattle', cattleRoutes);
+app.use('/api/farmer/location', locationRoutes);
+app.use('/api/farmer/user', userRoutes);
+
+// Admin API Routes
+app.use('/api/admin/auth', authLimiter, adminAuthRoutes);
+app.use('/api/admin/cattle', adminCattleRoutes);
+app.use('/api/admin/disputes', adminDisputeRoutes);
+app.use('/api/admin/analytics', adminAnalyticsRoutes);
+app.use('/api/admin/users', adminUserRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');

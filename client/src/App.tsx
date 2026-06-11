@@ -1,6 +1,6 @@
 // Update client/src/App.tsx
 import React, { useEffect, useState } from 'react';
-import { preloadMuzzleModel } from './utils/MuzzleModelService';
+import { preloadMuzzleModel } from '@ama-gau-dhana/shared';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useOutlet } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { CssBaseline, CircularProgress, Box, Typography, Stack } from '@mui/material';
@@ -10,10 +10,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './queryClient';
 import PageTransition from './components/PageTransition';
-import { syncManager } from './utils/syncManager';
+import { syncManager } from '@ama-gau-dhana/shared';
 import { getServerHealthAPI } from './apis/apis';
-import { ProcessingProvider } from './contexts/ProcessingContext';
-import { GlobalProcessingOverlay } from './components/GlobalProcessingOverlay';
+import { ProcessingProvider } from '@ama-gau-dhana/shared';
+import { GlobalProcessingOverlay } from '@ama-gau-dhana/shared';
 import { Geolocation } from '@capacitor/geolocation';
 import ocacLogo from '../src/assets/ocac.png';
 import iiitLogo from '../src/assets/iiit.png';
@@ -22,8 +22,7 @@ import * as tf from '@tensorflow/tfjs';
 // Import Pages
 import AppLayout from './components/AppLayout';
 import Home from './pages/Home';
-import AddCow from './pages/AddCow';
-import SearchCow from './pages/SearchCow';
+import { AddCow, SearchCow } from '@ama-gau-dhana/shared';
 import CowProfile from './pages/CowProfile';
 import MyCows from './pages/MyCows';
 import UserProfile from './pages/UserProfile';

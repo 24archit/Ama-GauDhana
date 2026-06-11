@@ -1,0 +1,156 @@
+import { Request, Response } from 'express';
+import { User } from '../../models/User';
+import { Cattle } from '../../models/Cattel';
+
+export const getFarmers = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const search = req.query.search as string;
+
+        let query: any = { role: 'farmer' };
+        if (search) {
+            query = {
+                ...query,
+                $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { 'contact.phone': { $regex: search, $options: 'i' } }
+                ]
+            };
+        }
+
+        const skip = (page - 1) * limit;
+
+        const farmers = await User.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        const total = await User.countDocuments(query);
+
+        res.status(200).json({
+            success: true,
+            data: farmers,
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page
+        });
+    } catch (error: any) {
+        console.error('Error fetching farmers:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+export const getFarmerDetails = async (req: Request, res: Response) => {
+    try {
+        const farmer = await User.findOne({ _id: req.params.id, role: 'farmer' }).lean();
+        if (!farmer) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
+
+        const stats = await Cattle.aggregate([
+            { $match: { farmerId: farmer._id } },
+            { $group: {
+                _id: null,
+                totalCattle: { $sum: 1 },
+                successAI: { $sum: { $cond: [{ $eq: ['$aiMetadata.status', 'SUCCESS'] }, 1, 0] } },
+                disputes: { $sum: { $cond: ['$isDispute', 1, 0] } }
+            }}
+        ]);
+        
+        const statData = stats[0] || { totalCattle: 0, successAI: 0, disputes: 0 };
+        const data = { ...farmer, stats: statData };
+
+        res.status(200).json({ success: true, data });
+    } catch (error: any) {
+        console.error('Error fetching farmer details:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+export const getFarmerCattle = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        const cattle = await Cattle.find({ farmerId: req.params.id })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        const total = await Cattle.countDocuments({ farmerId: req.params.id });
+
+        res.status(200).json({
+            success: true,
+            data: cattle,
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: page
+        });
+    } catch (error: any) {
+        console.error('Error fetching farmer cattle:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+export const deleteFarmer = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const deletedFarmer = await User.findOneAndDelete({ _id: id, role: 'farmer' });
+
+        if (!deletedFarmer) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
+
+        // Also delete their cattle
+        await Cattle.deleteMany({ farmerId: id });
+
+        res.status(200).json({ success: true, message: 'Farmer deleted successfully' });
+    } catch (error: any) {
+        console.error('Error deleting farmer:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+export const updateFarmer = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        
+        // Ensure role cannot be changed
+        delete updateData.role;
+        delete updateData.auth;
+        delete updateData.cows;
+        
+        const updatedFarmer = await User.findOneAndUpdate(
+            { _id: id, role: 'farmer' },
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).lean();
+
+        if (!updatedFarmer) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
+
+        // We need to fetch stats again to return the full profile data shape
+        const stats = await Cattle.aggregate([
+            { $match: { farmerId: updatedFarmer._id } },
+            { $group: {
+                _id: null,
+                totalCattle: { $sum: 1 },
+                successAI: { $sum: { $cond: [{ $eq: ['$aiMetadata.status', 'SUCCESS'] }, 1, 0] } },
+                disputes: { $sum: { $cond: ['$isDispute', 1, 0] } }
+            }}
+        ]);
+        
+        const statData = stats[0] || { totalCattle: 0, successAI: 0, disputes: 0 };
+        const data = { ...updatedFarmer, stats: statData };
+
+        res.status(200).json({ success: true, data, message: 'Farmer updated successfully' });
+    } catch (error: any) {
+        console.error('Error updating farmer:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};

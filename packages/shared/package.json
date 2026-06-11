@@ -1,0 +1,34 @@
+{
+  "name": "@ama-gau-dhana/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "build": "echo 'No build required for shared package'"
+  },
+  "peerDependencies": {
+    "@capacitor-community/camera-preview": "*",
+    "@capacitor/app": "*",
+    "@capacitor/core": "*",
+    "@capacitor/geolocation": "*",
+    "@capacitor/preferences": "*",
+    "@mui/icons-material": "^7.3.8",
+    "@mui/material": "^7.3.8",
+    "@tanstack/react-query": "*",
+    "@tensorflow/tfjs": "*",
+    "@tensorflow/tfjs-backend-webgl": "*",
+    "axios": "*",
+    "framer-motion": "*",
+    "localforage": "*",
+    "react": "*",
+    "react-dom": "*",
+    "react-router-dom": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3"
+  },
+  "dependencies": {
+    "@mui/system": "^7.3.8"
+  }
+}

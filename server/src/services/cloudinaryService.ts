@@ -1,0 +1,47 @@
+import { v2 as cloudinary } from 'cloudinary';
+import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Cloudinary automatically picks up CLOUDINARY_URL from the environment variables
+export const uploadBase64ToCloudinary = async (base64String: string, folder: string = 'ama-gau-dhana-telemetry'): Promise<string> => {
+    try {
+        if (!base64String) return "";
+        if (base64String.startsWith('http')) return base64String;
+
+        // Ensure proper format if it's raw base64 without the data URI scheme
+        let uploadStr = base64String;
+        if (!base64String.startsWith('data:image')) {
+            uploadStr = `data:image/jpeg;base64,${base64String}`;
+        }
+
+        const result = await cloudinary.uploader.upload(uploadStr, {
+            folder,
+            public_id: uuidv4()
+        });
+
+        return result.secure_url;
+    } catch (error) {
+        console.error('Cloudinary telemetry upload error:', error);
+        return "";
+    }
+};
+
+export const deleteFromCloudinary = async (url: string) => {
+    try {
+        if (!url || !url.includes('cloudinary.com')) return;
+        
+        // Extract public_id from typical cloudinary URL
+        // https://res.cloudinary.com/<cloud_name>/image/upload/v123456789/<folder>/<filename>.<ext>
+        const regex = /\/v\d+\/(.+)\.\w+$/;
+        const match = url.match(regex);
+        if (match && match[1]) {
+            const publicId = match[1];
+            await cloudinary.uploader.destroy(publicId);
+            console.log(`Deleted image from Cloudinary: ${publicId}`);
+        }
+    } catch (error) {
+        console.error('Cloudinary telemetry delete error:', error);
+    }
+};

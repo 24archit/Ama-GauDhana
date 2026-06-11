@@ -1,0 +1,12 @@
+{
+  "name": "ama-gau-dhana-workspace",
+  "private": true,
+  "workspaces": [
+    "client",
+    "admin-app",
+    "packages/*"
+  ],
+  "dependencies": {
+    "@capacitor/core": "^8.1.0"
+  }
+}

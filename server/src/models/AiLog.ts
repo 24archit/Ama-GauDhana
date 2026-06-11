@@ -1,0 +1,100 @@
+import mongoose, { Schema, Document } from 'mongoose';
+
+export interface IAiLog extends Document {
+    timestamp: Date;
+    endpoint?: string;
+    success: boolean;
+    matchStatus?: string;
+    cowId?: string;
+    inferenceTimeMs: number;
+    imageF?: string; // Optional field for base64 images if needed in future
+    muzzleConfM?: number;
+    muzzleConfF?: number;
+    spoofProbM?: number;
+    spoofProbF?: number;
+    cowName?: string;
+    faceSimilarityScore?: number;
+    muzzleSimilarityScore?: number;
+    spatialMuzzleSim?: number;
+    spatialFaceSim?: number;
+    muzzlePostLgScore?: number;
+    lgMatches?: number;
+    ensembleScore?: number;
+    pignisticMatch?: number;
+    dsBeliefMatch?: number;
+    dsBeliefMismatch?: number;
+    dsUncertainty?: number;
+    reason?: string;
+    bestWrongAnswerImageUrl?: string;
+    muzzleImgUrl?: string;
+    faceImgUrl?: string;
+    muzzleCropUrl?: string;
+    faceCropUrl?: string;
+    matchedCowName?: string;
+    muzzleThreshold?: number;
+    spoofThreshold?: number;
+    tradMorphology?: {
+        beadCount?: number;
+        avgArea?: number;
+        avgEccentricity?: number;
+    };
+    tradLbpDist?: number;
+    tradHogDist?: number;
+    tradInlierRatio?: number;
+    tradAlignedSsim?: number;
+    xgbScore?: number;
+    xgbMappedScore?: number;
+    isAiOutcomeCorrect?: boolean;
+    createdAt: Date;
+}
+
+const AiLogSchema = new Schema<IAiLog>({
+    timestamp: { type: Date, required: true },
+    endpoint: { type: String },
+    success: { type: Boolean, required: true },
+    matchStatus: { type: String },
+    cowId: { type: String },
+    inferenceTimeMs: { type: Number, required: true },
+    imageF: { type: String, select: false },
+    muzzleConfM: { type: Number },
+    muzzleConfF: { type: Number },
+    spoofProbM: { type: Number },
+    spoofProbF: { type: Number },
+    cowName: { type: String },
+    faceSimilarityScore: { type: Number },
+    muzzleSimilarityScore: { type: Number },
+    spatialMuzzleSim: { type: Number },
+    spatialFaceSim: { type: Number },
+    muzzlePostLgScore: { type: Number },
+    lgMatches: { type: Number },
+    ensembleScore: { type: Number },
+    pignisticMatch: { type: Number },
+    dsBeliefMatch: { type: Number },
+    dsBeliefMismatch: { type: Number },
+    dsUncertainty: { type: Number },
+    reason: { type: String },
+    bestWrongAnswerImageUrl: { type: String },
+    muzzleImgUrl: { type: String },
+    faceImgUrl: { type: String },
+    muzzleCropUrl: { type: String },
+    faceCropUrl: { type: String },
+    matchedCowName: { type: String },
+    muzzleThreshold: { type: Number },
+    spoofThreshold: { type: Number },
+    tradMorphology: {
+        beadCount: { type: Number },
+        avgArea: { type: Number },
+        avgEccentricity: { type: Number }
+    },
+    tradLbpDist: { type: Number },
+    tradHogDist: { type: Number },
+    tradInlierRatio: { type: Number },
+    tradAlignedSsim: { type: Number },
+    xgbScore: { type: Number },
+    xgbMappedScore: { type: Number },
+    isAiOutcomeCorrect: { type: Boolean }
+}, { timestamps: true });
+
+AiLogSchema.index({ timestamp: -1 });
+
+export const AiLog = mongoose.model<IAiLog>('AiLog', AiLogSchema, 'mllogs');

@@ -13,7 +13,7 @@ import {
 } from '@mui/icons-material';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
-import { syncManager } from '../utils/syncManager';
+import { syncManager } from '@ama-gau-dhana/shared';
 import { Badge } from '@mui/material';
 import BrandingFooter from './BrandingFooter';
 import { useQuery } from '@tanstack/react-query';
