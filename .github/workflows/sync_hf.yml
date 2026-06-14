@@ -1,0 +1,52 @@
+name: Sync to Hugging Face Space
+on:
+  push:
+    branches:
+      - '**' # Triggers on push to any branch
+    paths:
+      - 'dl-api/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          
+          # Set up a temporary checkout of the Hugging Face remote
+          git clone https://huggingface.co/spaces/24archit/Ama-Pashu-DL hf-space
+          cd hf-space
+          
+          # Check out the target branch or create it if it doesn't exist
+          git fetch origin
+          if git show-ref --verify --quiet refs/remotes/origin/${{ github.ref_name }}; then
+            git checkout ${{ github.ref_name }}
+          else
+            git checkout -b ${{ github.ref_name }}
+          fi
+          
+          # Move back to parent directory to run rsync
+          cd ..
+          
+          # Sync dl-api files to the hf-space folder.
+          # We explicitly EXCLUDE .git/, .gitattributes, and model/ so they are not deleted.
+          rsync -av --delete --exclude='.git/' --exclude='.gitattributes' --exclude='model/' dl-api/ hf-space/
+          
+          cd hf-space
+          # Commit and push changes to HF Space
+          git add -A
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "Sync from GitHub: ${{ github.sha }} to branch ${{ github.ref_name }}"
+            git push https://24archit:${HF_TOKEN}@huggingface.co/spaces/24archit/Ama-Pashu-DL ${{ github.ref_name }}
+          else
+            echo "No changes to sync."
+          fi

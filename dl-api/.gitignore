@@ -1,0 +1,21 @@
+# Model weights
+*.pth
+*.pt
+models/
+
+# Environment
+.env
+.venv
+
+# Cache
+__pycache__
+
+# Logs
+ml_logs
+
+# Notebooks (reference only)
+notebook*/
+*.ipynb
+
+# modal
+modal_app.py

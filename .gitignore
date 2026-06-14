@@ -57,5 +57,19 @@ wipe_db.py
 .venv
 wipe_db.ts
 uploads
-dl-api/
+# Ignore specific dl-api files and folders
+dl-api/notebook/
+dl-api/model/
+dl-api/.venv/
+dl-api/modal_app.py
+dl-api/.env
+dl-api/__pycache__/
+dl-api/*.py[cod]
+
+# Broadly ignore large model weights
+dl-api/**/*.pth
+dl-api/**/*.pt
+dl-api/**/*.bin
+dl-api/**/*.onnx
+dl-api/**/*.h5
 data/
