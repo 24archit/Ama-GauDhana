@@ -33,11 +33,11 @@ export const processTelemetry = async (telemetry: any, endpoint: string, success
                 endpoint
             });
         } catch (dbError) {
-            logger.error('Failed to save AiLog to database. Rolling back telemetry images.', dbError);
+            logger.error(dbError, 'Failed to save AiLog to database. Rolling back telemetry images.');
             if (uploadedMuzzleCrop) deleteFromCloudinary(uploadedMuzzleCrop).catch(() => {});
             if (uploadedFaceCrop) deleteFromCloudinary(uploadedFaceCrop).catch(() => {});
         }
     } catch (err) {
-        logger.error(`Failed to process telemetry from ${endpoint}:`, err);
+        logger.error(err, `Failed to process telemetry from ${endpoint}:`);
     }
 };

@@ -10,7 +10,7 @@ export const startPingJob = () => {
     //         try {
     //             await axios.get(`${DL_API_URL}/docs`, { timeout: 5000 });
     //         } catch (error: any) {
-    //             logger.error("[PingJob] Internal Ping Failed:", error.message);
+    //             logger.error(error.message, "[PingJob] Internal Ping Failed:");
     //         }
     //     }, 10 * 60 * 1000); // 10 minutes
     // }

@@ -62,7 +62,7 @@ async function getAllQdrantCowIds(): Promise<Set<string>> {
             logger.info('[Qdrant] Collection cattle_vectors_spatial not found. Assuming empty.');
             return qdrantCowIds;
         }
-        logger.error('[Qdrant] Error fetching vectors:', err.response?.data || err.message);
+        logger.error(err.response?.data || err.message, '[Qdrant] Error fetching vectors:');
         throw err;
     }
 
@@ -291,7 +291,7 @@ async function runCleanup() {
         logger.info(`===========================================\n`);
 
     } catch (error) {
-        logger.error('Fatal error during cleanup:', error);
+        logger.error(error, 'Fatal error during cleanup:');
     } finally {
         await mongoose.disconnect();
         logger.info('[MongoDB] Disconnected.');

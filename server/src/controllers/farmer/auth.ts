@@ -50,7 +50,7 @@ export const registerFarmer = async (req: any, res: any) => {
         });
 
     } catch (error: any) {
-        logger.error('Registration Error:', error);
+        logger.error(error, 'Registration Error:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -88,7 +88,7 @@ export const loginFarmer = async (req: any, res: any) => {
         });
 
     } catch (error: any) {
-        logger.error('Login Error:', error);
+        logger.error(error, 'Login Error:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

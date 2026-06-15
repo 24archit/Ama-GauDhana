@@ -49,7 +49,7 @@ export const startCleanupJob = () => {
                 }
             }
         } catch (error) {
-            logger.error('[CleanupJob] Error during orphaned cow cleanup:', error);
+            logger.error(error, '[CleanupJob] Error during orphaned cow cleanup:');
         } finally {
             cleanupRunning = false;
         }

@@ -275,7 +275,7 @@ export const searchCow = asyncHandler(async (req: Request, res: Response) => {
             logger.info('Client disconnected, canceled DL API search request.');
             return res.status(499).json({ success: false, message: 'Client Closed Request' });
         }
-        logger.error('Error calling DL API search:', dlError?.response?.data || dlError.message);
+        logger.error(dlError?.response?.data || dlError.message, 'Error calling DL API search:');
         let errorDetail = dlError?.response?.data?.detail;
         if (typeof errorDetail === 'object' && errorDetail?.message) {
             errorDetail = errorDetail.message;
@@ -373,7 +373,7 @@ export async function processDlApiResult(payload: any) {
         
         return true;
     } catch (error) {
-        logger.error(`[Sync] Error processing DL API result for cow ${cow_id}:`, error);
+        logger.error(error, `[Sync] Error processing DL API result for cow ${cow_id}:`);
         await Cattle.findByIdAndUpdate(cow_id, { $set: { 'aiMetadata.status': 'PENDING' } });
         return false;
     }

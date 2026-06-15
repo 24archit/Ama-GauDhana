@@ -43,7 +43,7 @@ export const loginAdmin = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        logger.error('Admin Login Error:', error);
+        logger.error(error, 'Admin Login Error:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -91,7 +91,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        logger.error('Admin Register Error:', error);
+        logger.error(error, 'Admin Register Error:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

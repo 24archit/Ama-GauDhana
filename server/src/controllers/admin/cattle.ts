@@ -99,7 +99,7 @@ export const getCattleDetails = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, data: cattle });
     } catch (error: any) {
-        logger.error('Error fetching cattle details:', error);
+        logger.error(error, 'Error fetching cattle details:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -136,7 +136,7 @@ export const getAllCattle = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching all cattle:', error);
+        logger.error(error, 'Error fetching all cattle:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -168,7 +168,7 @@ export const getPendingCattle = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching pending cattle:', error);
+        logger.error(error, 'Error fetching pending cattle:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -305,7 +305,7 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
             });
 
         } catch (error: any) {
-            logger.error('Error proxy registering cow (Rollback Triggered):', error.message || error);
+            logger.error(error.message || error, 'Error proxy registering cow (Rollback Triggered):');
             
             if (savedCow) {
                 const session = await mongoose.startSession();
@@ -322,7 +322,7 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
             res.status(500).json({ success: false, message: error.message || 'Could not complete registration. Rolled back successfully.' });
         }
     } catch (error: any) {
-        logger.error('Error in proxy registering cow outer block:', error);
+        logger.error(error, 'Error in proxy registering cow outer block:');
         res.status(500).json({ success: false, message: error.message || 'Server Error' });
     }
 };
@@ -350,7 +350,7 @@ export const deleteCattle = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Cattle deleted successfully' });
     } catch (error: any) {
-        logger.error('Error deleting cattle:', error);
+        logger.error(error, 'Error deleting cattle:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -381,7 +381,7 @@ export const updateCattle = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Cattle updated successfully', data: updatedCattle });
     } catch (error: any) {
-        logger.error('Error updating cattle:', error);
+        logger.error(error, 'Error updating cattle:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -469,13 +469,13 @@ export const proxySearchCow = async (req: Request, res: Response) => {
                 logger.info('Client disconnected, canceled DL API search request.');
                 return res.status(499).json({ success: false, message: 'Client Closed Request' });
             }
-            logger.error('Error calling DL API proxy search:', dlError?.response?.data || dlError.message);
+            logger.error(dlError?.response?.data || dlError.message, 'Error calling DL API proxy search:');
             const errorDetail = dlError?.response?.data?.detail || 'AI Service unavailable or could not process images.';
             return res.status(404).json({ success: false, message: errorDetail });
         }
 
     } catch (error: any) {
-        logger.error('Error in proxy search:', error);
+        logger.error(error, 'Error in proxy search:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

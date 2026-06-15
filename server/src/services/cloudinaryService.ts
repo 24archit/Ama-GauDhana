@@ -26,7 +26,7 @@ export const uploadBase64ToCloudinary = async (base64String: string, folder: str
 
         return result.secure_url;
     } catch (error) {
-        logger.error('Cloudinary base64 upload error:', error);
+        logger.error(error, 'Cloudinary base64 upload error:');
         return "";
     }
 };
@@ -40,7 +40,7 @@ export const uploadBufferToCloudinary = async (buffer: Buffer, folder: string = 
             },
             (error, result) => {
                 if (error) {
-                    logger.error('Cloudinary buffer upload error:', error);
+                    logger.error(error, 'Cloudinary buffer upload error:');
                     reject(error);
                 } else if (result) {
                     resolve(result.secure_url);
@@ -70,6 +70,6 @@ export const deleteFromCloudinary = async (url: string) => {
             logger.info(`Deleted image from Cloudinary: ${publicId}`);
         }
     } catch (error) {
-        logger.error('Cloudinary delete error:', error);
+        logger.error(error, 'Cloudinary delete error:');
     }
 };

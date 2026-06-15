@@ -82,7 +82,7 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
             faceTelemetryCloudinary = await safeUpload(faceProfileFile.buffer, 'ama-gau-dhana-telemetry');
             muzzleTelemetryCloudinary = await safeUpload(muzzleFile.buffer, 'ama-gau-dhana-telemetry');
         } catch (uploadError) {
-            logger.error('Error during image uploads, rolling back:', uploadError);
+            logger.error(uploadError, 'Error during image uploads, rolling back:');
             const err = new Error('Failed to upload images. Please try again.');
             (err as any).statusCode = 500;
             throw err;
@@ -143,7 +143,7 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
             });
             session.endSession();
         } catch (dbError) {
-            logger.error('Error saving to MongoDB, rolling back:', dbError);
+            logger.error(dbError, 'Error saving to MongoDB, rolling back:');
             const err = new Error('Database error during registration. Please try again.');
             (err as any).statusCode = 500;
             throw err;
@@ -161,7 +161,7 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
                 muzzle_image_url: muzzleTelemetryCloudinary
             });
         } catch (apiError: any) {
-            logger.error('Error triggering DL-API:', apiError.message);
+            logger.error(apiError.message, 'Error triggering DL-API:');
             const err = new Error('Could not trigger AI registration process. Please try again.');
             (err as any).statusCode = 500;
             throw err;
@@ -201,10 +201,10 @@ export const cleanupCowCloudResources = async (cow: any) => {
         try {
             await dlApiClient.delete(`/cow/${cow._id}`);
         } catch (dlErr) {
-            logger.error(`Failed to delete vectors for cow ${cow._id} in DL-API:`, dlErr);
+            logger.error(dlErr, `Failed to delete vectors for cow ${cow._id} in DL-API:`);
         }
 
     } catch (err) {
-        logger.error('Error in cleanupCowCloudResources:', err);
+        logger.error(err, 'Error in cleanupCowCloudResources:');
     }
 };

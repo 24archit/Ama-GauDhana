@@ -18,7 +18,7 @@ export const getUserProfile = async (req: any, res: Response) => {
 
         res.status(200).json({ success: true, user });
     } catch (error) {
-        logger.error('Fetch Profile Error:', error);
+        logger.error(error, 'Fetch Profile Error:');
         res.status(500).json({ success: false, message: 'Server Error fetching profile' });
     }
 };
@@ -61,7 +61,7 @@ export const updateUserProfile = async (req: any, res: Response) => {
 
         res.status(200).json({ success: true, user: updatedUser });
     } catch (error) {
-        logger.error('Update Profile Error:', error);
+        logger.error(error, 'Update Profile Error:');
         res.status(500).json({ success: false, message: 'Server Error updating profile' });
     }
 };
@@ -86,7 +86,7 @@ export const logoutUser = async (req: any, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
-        logger.error('Logout Error:', error);
+        logger.error(error, 'Logout Error:');
         res.status(500).json({ success: false, message: 'Server Error during logout' });
     }
 };

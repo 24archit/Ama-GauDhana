@@ -36,7 +36,7 @@ export const getDisputes = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching disputes:', error);
+        logger.error(error, 'Error fetching disputes:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -87,7 +87,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, data: updatedDispute, message: 'Dispute resolved' });
     } catch (error: any) {
-        logger.error('Error resolving dispute:', error);
+        logger.error(error, 'Error resolving dispute:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

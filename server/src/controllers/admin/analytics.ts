@@ -24,7 +24,7 @@ export const getSystemStats = async (req: Request, res: Response) => {
             }
         });
     } catch (error: any) {
-        logger.error('Error fetching stats:', error);
+        logger.error(error, 'Error fetching stats:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -139,7 +139,7 @@ export const getAiLogs = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching AI logs:', error);
+        logger.error(error, 'Error fetching AI logs:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -156,7 +156,7 @@ export const getAiLogById = async (req: Request, res: Response) => {
         }
         res.status(200).json({ success: true, data: log });
     } catch (error: any) {
-        logger.error('Error fetching AI log by ID:', error);
+        logger.error(error, 'Error fetching AI log by ID:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -178,7 +178,7 @@ export const updateAiLog = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Log updated successfully', data: updatedLog });
     } catch (error: any) {
-        logger.error('Error updating AI log:', error);
+        logger.error(error, 'Error updating AI log:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -207,7 +207,7 @@ export const deleteAiLog = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Log deleted successfully' });
     } catch (error: any) {
-        logger.error('Error deleting AI log:', error);
+        logger.error(error, 'Error deleting AI log:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -281,7 +281,7 @@ export const exportAiLogs = async (req: Request, res: Response) => {
         return res.status(200).send(csv);
 
     } catch (error: any) {
-        logger.error('Error exporting AI logs:', error);
+        logger.error(error, 'Error exporting AI logs:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };

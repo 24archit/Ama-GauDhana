@@ -39,7 +39,7 @@ export const getFarmers = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching farmers:', error);
+        logger.error(error, 'Error fetching farmers:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -66,7 +66,7 @@ export const getFarmerDetails = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, data });
     } catch (error: any) {
-        logger.error('Error fetching farmer details:', error);
+        logger.error(error, 'Error fetching farmer details:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -93,7 +93,7 @@ export const getFarmerCattle = async (req: Request, res: Response) => {
             currentPage: page
         });
     } catch (error: any) {
-        logger.error('Error fetching farmer cattle:', error);
+        logger.error(error, 'Error fetching farmer cattle:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -124,12 +124,12 @@ export const deleteFarmer = async (req: Request, res: Response) => {
                 await cleanupCowCloudResources(cow);
             }
         } catch (cleanupErr) {
-            logger.error('Error during cloud cleanup in deleteFarmer:', cleanupErr);
+            logger.error(cleanupErr, 'Error during cloud cleanup in deleteFarmer:');
         }
 
         res.status(200).json({ success: true, message: 'Farmer deleted successfully' });
     } catch (error: any) {
-        logger.error('Error deleting farmer:', error);
+        logger.error(error, 'Error deleting farmer:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
@@ -170,7 +170,7 @@ export const updateFarmer = async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, data, message: 'Farmer updated successfully' });
     } catch (error: any) {
-        logger.error('Error updating farmer:', error);
+        logger.error(error, 'Error updating farmer:');
         res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
