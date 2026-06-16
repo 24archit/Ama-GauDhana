@@ -123,4 +123,10 @@ CattleSchema.index({ farmerId: 1, tagNumber: 1 });
 // Text index for optimized searching (replaces slow $regex)
 CattleSchema.index({ name: 'text', tagNumber: 'text' });
 
+// Atomic lock to prevent TOCTOU race conditions during registration
+CattleSchema.index(
+    { farmerId: 1, 'aiMetadata.status': 1 },
+    { unique: true, partialFilterExpression: { 'aiMetadata.status': 'PENDING' } }
+);
+
 export const Cattle = mongoose.model<ICattle>('Cattle', CattleSchema);

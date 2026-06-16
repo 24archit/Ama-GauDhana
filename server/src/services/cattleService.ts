@@ -138,10 +138,17 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
             session.endSession();
         } catch (dbError: any) {
             logger.error(dbError, 'Error saving to MongoDB, rolling back:');
-            if (dbError.code === 11000 && dbError.keyPattern && dbError.keyPattern.tagNumber) {
-                const err = new Error('Cow with this tag number already exists');
-                (err as any).statusCode = 400;
-                throw err;
+            if (dbError.code === 11000) {
+                if (dbError.keyPattern && dbError.keyPattern.tagNumber) {
+                    const err = new Error('Cow with this tag number already exists');
+                    (err as any).statusCode = 400;
+                    throw err;
+                }
+                if (dbError.keyPattern && dbError.keyPattern['aiMetadata.status']) {
+                    const err = new Error('You already have a cow registration in progress. Please wait for it to complete.');
+                    (err as any).statusCode = 400;
+                    throw err;
+                }
             }
             const err = new Error('Database error during registration. Please try again.');
             (err as any).statusCode = 500;
@@ -169,16 +176,21 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
         return savedCow;
 
     } catch (error: any) {
-        if (savedCow) {
-            const session = await mongoose.startSession();
-            await session.withTransaction(async () => {
-                await Cattle.findByIdAndDelete(savedCow._id, { session });
-                await User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } }, { session });
-            });
-            session.endSession();
-        }
-        for (const fileUrl of uploadedFiles) {
-            await deleteFromCloudinary(fileUrl).catch(() => {});
+        try {
+            if (savedCow) {
+                const session = await mongoose.startSession();
+                await session.withTransaction(async () => {
+                    await Cattle.findByIdAndDelete(savedCow._id, { session });
+                    await User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } }, { session });
+                });
+                session.endSession();
+            }
+        } catch (rollbackErr) {
+            logger.error(rollbackErr, 'Error executing DB rollback:');
+        } finally {
+            for (const fileUrl of uploadedFiles) {
+                await deleteFromCloudinary(fileUrl).catch(() => {});
+            }
         }
         throw error;
     }

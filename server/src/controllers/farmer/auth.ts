@@ -11,7 +11,7 @@ export const registerFarmer = async (req: any, res: any) => {
         const { name, phone, village, state, district, pincode } = req.body;
 
         // Basic validation
-        if (!name || !phone) {
+        if (!name || !phone || typeof phone !== 'string') {
             return res.status(400).json({ success: false, message: 'Name and phone are required' });
         }
 
@@ -59,7 +59,7 @@ export const loginFarmer = async (req: any, res: any) => {
     try {
         const { phone } = req.body;
 
-        if (!phone) {
+        if (!phone || typeof phone !== 'string') {
             return res.status(400).json({ success: false, message: 'Phone number is required' });
         }
 

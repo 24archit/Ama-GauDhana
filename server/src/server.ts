@@ -58,8 +58,8 @@ const allowedOrigins = [
 const corsOptionsDelegate = (req: any, callback: any) => {
   const origin = req.header('Origin');
   
-  // Allow health checks from Render/internal without origin
-  if (!origin && (req.path === '/' || req.path === '/api/health')) {
+  // Allow health checks from Render/internal without origin, and bypass for tests
+  if (process.env.NODE_ENV === 'test' || (!origin && (req.path === '/' || req.path === '/api/health'))) {
     return callback(null, { origin: true });
   }
 
@@ -98,8 +98,10 @@ const generalLimiter = rateLimit({
 });
 
 // Database and Jobs Initialization
-connectDB();
-initJobs();
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+  initJobs();
+}
 
 // Static and Public Routes
 app.get('/api/health', generalLimiter, (req, res) => res.status(200).send("Express Server is Awake and running!"));
@@ -121,6 +123,10 @@ app.use('/api/admin/users', generalLimiter, adminUserRoutes);
 // Global Error Handler Middleware
 app.use(errorHandler);
 
-app.listen(Number(port), "0.0.0.0", () => {
-  logger.info(`Server is running on port ${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(Number(port), "0.0.0.0", () => {
+    logger.info(`Server is running on port ${port}`);
+  });
+}
+
+export default app;

@@ -210,7 +210,7 @@ async def _process_registration_impl(payload: dict, notify_webhook: bool = True,
                 query_muzzle=query_muzzle,
                 query_face=spatial_face_emb,
                 query_mega_face=face_emb,
-                user_id=None, role="admin", part_type=None, top_k=25, cohort_limit=100
+                user_id=None, role="admin", part_type=None, top_k=25, cohort_limit=100, fetch_vectors=True
             )
             if m_candidates and isinstance(m_candidates, list):
                 for c in m_candidates:
@@ -247,7 +247,7 @@ async def _process_registration_impl(payload: dict, notify_webhook: bool = True,
             if matched_cow_id and 'best_features' in locals() and best_features and best_features.get("spatial_face_sim"):
                 best_face_sim = best_features.get("spatial_face_sim")
             else:
-                res_f = glb.db.search(query_mega=face_emb, query_muzzle=None, query_face=spatial_face_emb, user_id=None, role="admin", part_type="face", top_k=1)
+                res_f = glb.db.search(query_mega=face_emb, query_muzzle=None, query_face=spatial_face_emb, user_id=None, role="admin", part_type="face", top_k=1, fetch_vectors=True)
                 if res_f.get("found"): 
                     face_match = res_f if isinstance(res_f, dict) and "vectors" in res_f else None
                     if face_match:

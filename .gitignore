@@ -75,3 +75,4 @@ dl-api/**/*.onnx
 dl-api/**/*.h5
 data/
 scripts/
+tests/

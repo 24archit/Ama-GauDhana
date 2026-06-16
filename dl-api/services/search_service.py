@@ -166,7 +166,7 @@ async def _search_cow_impl(req: SearchRequest, fastapi_req: Request):
             query_mega=query_mega,
             query_muzzle=query_muzzle,
             query_face=None,
-            user_id=req.user_id, role=req.role, part_type=["muzzle", "face_muzzle"], top_k=25
+            user_id=req.user_id, role=req.role, part_type=["muzzle", "face_muzzle"], top_k=25, fetch_vectors=True
         )
         if m_candidates and isinstance(m_candidates, list):
             for c in m_candidates: dynamic_candidates_dict[c["cow_id"]] = c
@@ -211,7 +211,7 @@ async def _search_cow_impl(req: SearchRequest, fastapi_req: Request):
         if matched_cow_id and 'best_features' in locals() and best_features and best_features.get("spatial_face_sim"):
             best_face_sim = best_features.get("spatial_face_sim")
         else:
-            f_candidates = glb.db.search(query_mega=face_emb, query_muzzle=None, query_face=spatial_face_emb, user_id=req.user_id, role=req.role, part_type="face", top_k=25)
+            f_candidates = glb.db.search(query_mega=face_emb, query_muzzle=None, query_face=spatial_face_emb, user_id=req.user_id, role=req.role, part_type="face", top_k=25, fetch_vectors=True)
             if f_candidates:
                 if not isinstance(f_candidates, list):
                     f_candidates = [f_candidates]
