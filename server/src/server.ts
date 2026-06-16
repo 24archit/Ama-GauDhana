@@ -55,18 +55,21 @@ const allowedOrigins = [
   process.env.ADMIN_CLIENT_LINK || ''
 ];
 
-const corsOptions = {
-  origin: function (origin: any, callback: any) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      logger.warn(`🛑 Blocked by CORS: ${origin}`);
-      callback(new Error('Not allowed by CORS policy'));
-    }
-  },
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  credentials: true,
-  optionsSuccessStatus: 200
+const corsOptionsDelegate = (req: any, callback: any) => {
+  const origin = req.header('Origin');
+  
+  // Allow health checks from Render/internal without origin
+  if (!origin && (req.path === '/' || req.path === '/api/health')) {
+    return callback(null, { origin: true });
+  }
+
+  // Strict check for all other requests
+  if (origin && allowedOrigins.includes(origin)) {
+    callback(null, { origin: true });
+  } else {
+    logger.warn(`🛑 Blocked by CORS: Origin ${origin} on path ${req.path}`);
+    callback(new Error('Not allowed by CORS policy'));
+  }
 };
 
 app.use(helmet({
@@ -74,7 +77,7 @@ app.use(helmet({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(cors(corsOptions));
+app.use(cors(corsOptionsDelegate));
 
 app.use(pinoHttp({ logger }));
 
