@@ -102,8 +102,8 @@ connectDB();
 initJobs();
 
 // Static and Public Routes
-app.get('/api/health', (req, res) => res.status(200).send("Express Server is Awake and running!"));
-app.get("/", (req, res) => res.send("Hello World! API running"));
+app.get('/api/health', generalLimiter, (req, res) => res.status(200).send("Express Server is Awake and running!"));
+app.get("/", generalLimiter, (req, res) => res.send("Hello World! API running"));
 
 // Farmer API Routes
 app.use('/api/farmer/auth', authLimiter, authRoutes);
