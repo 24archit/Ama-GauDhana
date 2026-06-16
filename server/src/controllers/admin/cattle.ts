@@ -13,6 +13,9 @@ import logger from '../../utils/logger';
 export const getCattleDetails = async (req: Request, res: Response) => {
     try {
         const id = req.params.id as string;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ success: false, message: 'Cattle not found' });
+        }
         let cattle = await Cattle.findById(id).populate('farmerId', 'name contact.phone location.village location.district');
         if (!cattle) {
             if (recentRejections.has(id)) {
@@ -213,6 +216,7 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
         const uploadedFiles: string[] = [];
 
         const safeUpload = async (buffer: Buffer, folderName: string = ''): Promise<string> => {
+            if ((req as any).isAborted) throw new Error('Client Closed Request');
             const fileUrl = await uploadBufferToCloudinary(buffer, folderName);
             uploadedFiles.push(fileUrl);
             return fileUrl;
@@ -283,6 +287,7 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
             });
 
             const session = await mongoose.startSession();
+            if ((req as any).isAborted) throw new Error('Client Closed Request');
             await session.withTransaction(async () => {
                 const [savedItems] = await Cattle.create([newCow], { session });
                 savedCow = savedItems;
@@ -330,6 +335,9 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
 export const deleteCattle = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ success: false, message: 'Cattle not found' });
+        }
         const session = await mongoose.startSession();
         let deletedCattle: any = null;
         await session.withTransaction(async () => {
@@ -358,6 +366,9 @@ export const deleteCattle = async (req: Request, res: Response) => {
 export const updateCattle = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ success: false, message: 'Cattle not found' });
+        }
         const updateData = req.body;
         
         // Prevent editing of images, system fields, and farmerId through this basic update route

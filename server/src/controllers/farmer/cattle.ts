@@ -28,7 +28,7 @@ export const registerCow = asyncHandler(async (req: Request, res: Response) => {
     const farmerId = authReq.user.id;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-    const savedCow = await createCattleRegistration(farmerId, authReq.body, files);
+    const savedCow = await createCattleRegistration(req, farmerId, authReq.body, files);
 
     res.status(202).json({
         success: true,
@@ -118,6 +118,10 @@ function getRejectionMessage(status: string, message?: string): string {
 export const getCowProfile = asyncHandler(async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     if (!authReq.user) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    if (!mongoose.Types.ObjectId.isValid(authReq.params.id)) {
+        return res.status(404).json({ success: false, message: 'Cow not found or unauthorized' });
+    }
 
     let cow = await Cattle.findOne({ _id: authReq.params.id, farmerId: authReq.user.id });
 

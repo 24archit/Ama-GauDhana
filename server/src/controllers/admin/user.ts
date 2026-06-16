@@ -46,6 +46,9 @@ export const getFarmers = async (req: Request, res: Response) => {
 
 export const getFarmerDetails = async (req: Request, res: Response) => {
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
         const farmer = await User.findOne({ _id: req.params.id, role: 'farmer' }).lean();
         if (!farmer) {
             return res.status(404).json({ success: false, message: 'Farmer not found' });
@@ -77,6 +80,9 @@ export const getFarmerCattle = async (req: Request, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
 
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
         const cattle = await Cattle.find({ farmerId: req.params.id })
             .sort({ createdAt: -1 })
             .skip(skip)
@@ -101,6 +107,9 @@ export const getFarmerCattle = async (req: Request, res: Response) => {
 export const deleteFarmer = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
         const session = await mongoose.startSession();
         let deletedFarmer: any = null;
         let farmersCattle: any[] = [];
@@ -137,6 +146,9 @@ export const deleteFarmer = async (req: Request, res: Response) => {
 export const updateFarmer = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
         const updateData = req.body;
         
         // Ensure role cannot be changed

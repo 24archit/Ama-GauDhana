@@ -2,14 +2,48 @@ import time
 import asyncio
 import traceback
 import gc
-from fastapi import Request
+import requests
+from fastapi import Request, HTTPException
 
 from core import globals as glb
+from core.config import EXPRESS_WEBHOOK_URL
 from services.image_service import download_image, encode_crop
 from services.webhook_service import send_webhook
 from services.fusion_service import compute_cosine_similarity, evaluate_biometric_match
 from services.tournament_service import run_biometric_tournament, compute_traditional_metrics
 from services.telemetry_builder import build_telemetry_payload
+
+async def cleanup_job_async(cow_id: str, delay: int = 300):
+    await asyncio.sleep(delay)
+    glb.active_jobs.pop(cow_id, None)
+
+async def process_registration_safe(payload: dict):
+    if glb.gpu_queue_size >= 5:
+        try:
+            requests.post(EXPRESS_WEBHOOK_URL, json={
+                "cow_id": payload["cow_id"],
+                "status": "failed",
+                "error_message": "The AI servers are currently at maximum capacity. Please try again later."
+            }, timeout=10)
+        except Exception as e:
+            print(f"Failed to send capacity error webhook: {e}")
+        return
+
+    glb.gpu_queue_size += 1
+    try:
+        await process_registration(payload, notify_webhook=True)
+    except Exception as e:
+        print(f"Error processing async registration: {e}")
+    finally:
+        glb.gpu_queue_size -= 1
+
+def get_job_status(cow_id: str):
+    if cow_id in glb.active_jobs:
+        job = glb.active_jobs[cow_id]
+        if job["status"] == "COMPLETED":
+            return {"status": "COMPLETED", "result": job.get("result", {})}
+        return {"status": job["status"]}
+    raise HTTPException(status_code=404, detail="Job not found or already finished")
 
 async def process_registration(payload: dict, notify_webhook: bool = True, fastapi_req: Request = None) -> dict:
     cow_id = payload.get("cow_id", "unknown")
@@ -46,6 +80,8 @@ async def process_registration(payload: dict, notify_webhook: bool = True, fasta
             except Exception as webhook_err:
                 print(f"Failed to send registration failure webhook: {webhook_err}")
         raise worker_err
+    finally:
+        asyncio.create_task(cleanup_job_async(cow_id))
 
 async def _process_registration_impl(payload: dict, notify_webhook: bool = True, fastapi_req: Request = None) -> dict:
     start_time = time.time()

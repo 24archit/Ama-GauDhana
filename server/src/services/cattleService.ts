@@ -5,7 +5,7 @@ import { dlApiClient } from '../utils/dlApiClient';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
 
-export const createCattleRegistration = async (farmerId: string, payload: any, files: any) => {
+export const createCattleRegistration = async (req: any, farmerId: string, payload: any, files: any) => {
     // 1. ATOMICITY CHECK: Ensure the farmer does not already have a PENDING cow.
     const existingPending = await Cattle.findOne({
         farmerId,
@@ -38,20 +38,13 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
         throw err;
     }
     
-    if (tagNo && tagNo.trim() !== '') {
-        const existingCow = await Cattle.findOne({ tagNumber: tagNo });
-        if (existingCow) {
-            const err = new Error('Cow with this tag number already exists');
-            (err as any).statusCode = 400;
-            throw err;
-        }
-    }
 
     let uploadedFiles: string[] = [];
     let savedCow: any = null;
 
     try {
         const safeUpload = async (buffer: Buffer, folderName: string = 'ama-gau-dhana-images') => {
+            if (req.isAborted) throw new Error('Client Closed Request');
             const result = await uploadBufferToCloudinary(buffer, folderName);
             if (result) uploadedFiles.push(result);
             return result;
@@ -133,6 +126,7 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
         });
 
         try {
+            if (req.isAborted) throw new Error('Client Closed Request');
             const session = await mongoose.startSession();
             await session.withTransaction(async () => {
                 const [savedItems] = await Cattle.create([newCow], { session });
@@ -142,8 +136,13 @@ export const createCattleRegistration = async (farmerId: string, payload: any, f
                 }, { session });
             });
             session.endSession();
-        } catch (dbError) {
+        } catch (dbError: any) {
             logger.error(dbError, 'Error saving to MongoDB, rolling back:');
+            if (dbError.code === 11000 && dbError.keyPattern && dbError.keyPattern.tagNumber) {
+                const err = new Error('Cow with this tag number already exists');
+                (err as any).statusCode = 400;
+                throw err;
+            }
             const err = new Error('Database error during registration. Please try again.');
             (err as any).statusCode = 500;
             throw err;

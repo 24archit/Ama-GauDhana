@@ -2,11 +2,13 @@ import express from 'express';
 import multer from 'multer';
 import { getAllCattle, proxyRegisterCow, deleteCattle, getCattleDetails, updateCattle, proxySearchCow, getPendingCattle } from '../../controllers/admin/cattle';
 import { requireAuth, authorizeRoles } from '../../middleware/auth';
+import { handleConnectionDrop } from '../../middleware/cleanup';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(requireAuth, authorizeRoles('admin'));
+router.use(handleConnectionDrop);
 
 router.get('/', getAllCattle);
 router.get('/pending', getPendingCattle);

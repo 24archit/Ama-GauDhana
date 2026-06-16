@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { registerCow, getMyCattle, getCowProfile, searchCow, handleDlApiWebhook } from '../../controllers/farmer/cattle';
 import { requireAuth } from '../../middleware/auth';
+import { handleConnectionDrop } from '../../middleware/cleanup';
 
 const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
@@ -11,6 +12,8 @@ router.post('/webhook/dl-api-complete', handleDlApiWebhook);
 
 // Apply auth middleware to all routes in this file
 router.use(requireAuth);
+router.use(handleConnectionDrop);
+
 
 router.post('/search', upload.fields([
     { name: 'faceImage', maxCount: 1 },
