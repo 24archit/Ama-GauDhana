@@ -87,7 +87,19 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(noSqlSanitize); // Sanitize ALL incoming payloads before they hit routers
 app.use(cors(corsOptionsDelegate));
 
-app.use(pinoHttp({ logger }));
+app.use(pinoHttp({ 
+  logger,
+  serializers: {
+    req: () => undefined,
+    res: () => undefined,
+  },
+  customSuccessMessage: function (req, res, responseTime) {
+    return `[${req.method}] ${req.url} - Status: ${res.statusCode} - Time: ${responseTime}ms`;
+  },
+  customErrorMessage: function (req, res, err) {
+    return `[${req.method}] ${req.url} - Status: ${res.statusCode} - Error: ${err.message}`;
+  }
+}));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
