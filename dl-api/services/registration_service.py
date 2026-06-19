@@ -7,7 +7,7 @@ from fastapi import Request, HTTPException
 
 from core import globals as glb
 from core.config import EXPRESS_WEBHOOK_URL
-from services.image_service import download_image, encode_crop, upload_crop_to_cloudinary, delete_image_from_cloudinary
+from services.image_service import download_image, encode_crop, upload_crop_to_cloudinary, delete_image_from_cloudinary, extract_crop_from_b64
 from services.webhook_service import send_webhook
 from services.fusion_service import compute_cosine_similarity, evaluate_biometric_match
 from services.tournament_service import run_biometric_tournament, compute_traditional_metrics
@@ -95,8 +95,15 @@ async def _process_registration_impl(payload: dict, upload_tasks: list, notify_w
     is_not_a_cow = False
     
     try:
-        muzzle_img = download_image(muzzle_url)
-        face_img = download_image(face_url)
+        if payload.get("muzzle_image_b64"):
+            muzzle_img = extract_crop_from_b64(payload.get("muzzle_image_b64"))
+        else:
+            muzzle_img = download_image(muzzle_url) if muzzle_url else None
+            
+        if payload.get("face_image_b64"):
+            face_img = extract_crop_from_b64(payload.get("face_image_b64"))
+        else:
+            face_img = download_image(face_url) if face_url else None
         
         is_cow_muzzle, cow_prob_m, _ = glb.dl.is_image_a_cow(muzzle_img)
         is_cow_face, cow_prob_f, _ = glb.dl.is_image_a_cow(face_img)

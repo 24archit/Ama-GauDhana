@@ -3,7 +3,7 @@ import asyncio
 from fastapi import Request, HTTPException
 
 from core import globals as glb
-from services.image_service import download_image, encode_crop, upload_crop_to_cloudinary, delete_image_from_cloudinary
+from services.image_service import download_image, encode_crop, upload_crop_to_cloudinary, delete_image_from_cloudinary, extract_crop_from_b64
 from schemas import SearchRequest
 from services.fusion_service import compute_cosine_similarity, evaluate_biometric_match
 from services.tournament_service import run_biometric_tournament, compute_traditional_metrics
@@ -69,10 +69,17 @@ def _raise_early_search_error(m_status: str, detail: str, req: SearchRequest, st
 
 async def _search_cow_impl(req: SearchRequest, fastapi_req: Request):
     try:
-        muzzle_img = download_image(req.muzzle_image_url)
-        face_img = download_image(req.face_image_url) if req.face_image_url else None
+        if req.muzzle_image_b64:
+            muzzle_img = extract_crop_from_b64(req.muzzle_image_b64)
+        else:
+            muzzle_img = download_image(req.muzzle_image_url) if req.muzzle_image_url else None
+            
+        if req.face_image_b64:
+            face_img = extract_crop_from_b64(req.face_image_b64)
+        else:
+            face_img = download_image(req.face_image_url) if req.face_image_url else None
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch images from Cloudinary storage: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to fetch or decode images: {e}")
     
     if await fastapi_req.is_disconnected():
         print("Client disconnected, aborting search pipeline.")
