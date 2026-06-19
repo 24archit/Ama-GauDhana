@@ -176,22 +176,19 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
         }
 
         // Send Job to DL-API REST Endpoint
-        try {
-            // We do not await this heavily, we just trigger it and let it run in the background thread of the DL-API.
-            // The DL-API will immediately return 202 Accepted.
-            await dlApiClient.post(`/register`, {
-                cow_id: savedCow._id.toString(),
-                farmer_id: farmerId,
-                cow_name: name,
-                face_image_url: faceTelemetryCloudinary,
-                muzzle_image_url: muzzleTelemetryCloudinary
-            });
-        } catch (apiError: any) {
-            logger.error(apiError.message, 'Error triggering DL-API:');
-            const err = new Error('Could not trigger AI registration process. Please try again.');
-            (err as any).statusCode = 500;
-            throw err;
-        }
+        // We trigger it and let it run in the background thread. We do NOT await it 
+        // to prevent stream aborted errors from rolling back the DB entry and images.
+        dlApiClient.post(`/register`, {
+            cow_id: savedCow._id.toString(),
+            farmer_id: farmerId,
+            cow_name: name,
+            face_image_url: faceTelemetryCloudinary,
+            muzzle_image_url: muzzleTelemetryCloudinary
+        }).catch((apiError: any) => {
+            logger.error(apiError.message || apiError, 'Error triggering DL-API in background:');
+            // We do not throw an error here. We will rely on manual retry or sync mechanisms 
+            // if the cow remains in PENDING status.
+        });
 
         return savedCow;
 
