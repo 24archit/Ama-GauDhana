@@ -61,8 +61,11 @@ export const resizeImage = (base64Str: string, maxWidth: number = 1080, quality:
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
-
-            resolve(canvas.toDataURL('image/webp', quality));
+            const result = canvas.toDataURL('image/webp', quality);
+            // Explicitly free the canvas memory immediately
+            canvas.width = 0;
+            canvas.height = 0;
+            resolve(result);
         };
         img.onerror = (err) => reject(err);
     });
@@ -115,7 +118,11 @@ export const compressImage = (dataUrl: string, maxWidth = 1080, maxHeight = 1080
             ctx.drawImage(img, 0, 0, width, height);
 
             // Use the dynamic quality parameter here, exporting as highly-efficient WebP
-            resolve(canvas.toDataURL('image/webp', quality));
+            const result = canvas.toDataURL('image/webp', quality);
+            // Explicitly free RAM
+            canvas.width = 0;
+            canvas.height = 0;
+            resolve(result);
         };
         img.onerror = reject;
         img.src = dataUrl;

@@ -255,6 +255,7 @@ export default function Analytics() {
       const a = document.createElement('a');
       a.href = url; a.download = 'ai_logs_export.csv';
       document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
     } catch { alert('Failed to export.'); }
     finally { setIsExporting(false); }
   };

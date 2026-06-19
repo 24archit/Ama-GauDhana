@@ -1,10 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Typography, Dialog, IconButton, Button } from '@mui/material';
+import { Box, Typography, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton, Button, useMediaQuery } from '@mui/material';
 import { Close, FlashOn, FlashOff, CheckCircle, Cameraswitch } from '@mui/icons-material';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
 
-import { getMuzzleModel, getNimaModel, isModelsCached } from '../utils/MuzzleModelService';
+import { getMuzzleModel, getNimaModel } from '../utils/MuzzleModelService';
 import { useCamera } from '../hooks/useCamera';
 
 import type { CameraGuidanceType, QualityReport, DetectionResult, Phase } from './camera/types';
@@ -25,12 +25,14 @@ export type { CameraGuidanceType, QualityReport, DetectionResult, Phase };
 export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onClose, onCapture, guidanceType }) => {
     const isAIScan = guidanceType === 'muzzle';
     const { cameraState, startPreview, stopPreview, capturePhoto, captureSweepFrames, flipCamera, toggleFlash } = useCamera();
+    const isLandscape = useMediaQuery('(orientation: landscape)');
 
     const muzzleModelRef = useRef<tf.GraphModel | null>(null);
     const nimaModelRef = useRef<tf.GraphModel | null>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const previewHostRef = useRef<HTMLDivElement | null>(null);
     const progressRafRef = useRef<number | null>(null);
+    const isCancelledRef = useRef<boolean>(false);
 
     const [phase, setPhase] = useState<Phase>('idle');
     const [flash, setFlash] = useState(false);
@@ -41,15 +43,19 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
     const [modelsLoaded, setModelsLoaded] = useState(!isAIScan);
     const [recordingProgress, setRecordingProgress] = useState(0);
     const [secondsLeft, setSecondsLeft] = useState(5);
+    const [confirmExitOpen, setConfirmExitOpen] = useState(false);
 
-    // ── Off-screen canvas ────────────────────────────────────────────────────
     useEffect(() => {
+        isCancelledRef.current = false;
         const canvas = document.createElement('canvas');
         canvas.width = FRAME_W;
         canvas.height = FRAME_H;
         captureCanvasRef.current = canvas;
 
-        return () => { captureCanvasRef.current = null; };
+        return () => { 
+            isCancelledRef.current = true;
+            captureCanvasRef.current = null; 
+        };
     }, []);
 
     // ── Model loading ────────────────────────────────────────────────────────
@@ -118,6 +124,11 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         setRecordingProgress(0);
         setSecondsLeft(5);
         setFlash(false);
+    }, []);
+
+    // ── Emergency Cleanup on Unmount ─────────────────────────────────────────
+    useEffect(() => {
+        // No manual revoke needed anymore, base64 strings garbage collect automatically
     }, []);
 
     const startPreviewInHost = useCallback(async (position?: 'rear' | 'front') => {
@@ -189,9 +200,12 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
         let inputTensor: tf.Tensor | null = null;
         let output: tf.Tensor | tf.Tensor[] | null = null;
+        let canvasElement: HTMLCanvasElement | null = null;
+        let imgElement: HTMLImageElement | null = null;
 
         try {
             const img = new Image();
+            imgElement = img;
             const loaded = new Promise((resolve, reject) => {
                 img.onload = async () => {
                     // Force the browser to fully decode/rasterize the image pixels into memory 
@@ -211,6 +225,7 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
             // Hardware accelerated off-screen canvas downscaling (95% VRAM savings)
             const canvas = document.createElement('canvas');
+            canvasElement = canvas;
             canvas.width = FRAME_W;
             canvas.height = FRAME_H;
             const ctx = canvas.getContext('2d');
@@ -238,6 +253,17 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         } finally {
             if (inputTensor) inputTensor.dispose();
             if (output) tf.dispose(output);
+            
+            // 🔥 BRUTAL RAM CLEANUP: Explicitly destroy the canvas buffer and Image object
+            if (canvasElement) {
+                canvasElement.width = 0;
+                canvasElement.height = 0;
+            }
+            if (imgElement) {
+                imgElement.src = '';
+                imgElement.onload = null;
+                imgElement.onerror = null;
+            }
         }
     }, []);
 
@@ -245,9 +271,12 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         if (!nimaModelRef.current) return 0;
         let inputTensor: tf.Tensor | null = null;
         let predictions: tf.Tensor | null = null;
+        let canvasElement: HTMLCanvasElement | null = null;
+        let imgElement: HTMLImageElement | null = null;
         
         try {
             const img = new Image();
+            imgElement = img;
             const loaded = new Promise((resolve, reject) => {
                 img.onload = async () => {
                     try { await img.decode(); } catch { /* ignore unsupported */ }
@@ -266,6 +295,7 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
             // Hardware accelerated off-screen canvas downscaling
             const canvas = document.createElement('canvas');
+            canvasElement = canvas;
             canvas.width = 224;
             canvas.height = 224;
             const ctx = canvas.getContext('2d');
@@ -294,6 +324,17 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         } finally {
             if (inputTensor) inputTensor.dispose();
             if (predictions) predictions.dispose();
+            
+            // 🔥 BRUTAL RAM CLEANUP
+            if (canvasElement) {
+                canvasElement.width = 0;
+                canvasElement.height = 0;
+            }
+            if (imgElement) {
+                imgElement.src = '';
+                imgElement.onload = null;
+                imgElement.onerror = null;
+            }
         }
     }, []);
 
@@ -352,6 +393,10 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         tf.engine().startScope();
         try {
             for (let index = 0; index < frames.length; index += 1) {
+            if (isCancelledRef.current) {
+                console.log("🛑 AI Analysis forcefully halted to clear RAM/VRAM.");
+                break;
+            }
             const frame = frames[index];
 
             if (isAIScan) {
@@ -403,16 +448,18 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             tf.engine().endScope();
         }
 
+        if (isCancelledRef.current) {
+            frames.length = 0; // Explicitly sever array elements to trigger forced GC sweep of massive base64 strings
+            console.log("🧹 RAM safely scrubbed: Inference loop broken. GC will collect arrays.");
+            return;
+        }
+
         if (isAIScan && bestNimaScore === -Infinity) {
-            frames.forEach(url => {
-                if (url !== bestFailFrame) {
-                    URL.revokeObjectURL(url);
-                }
-            });
             setQualityReport(bestFailQuality);
             setCapturedImage(bestFailFrame);
             setAnalysisStatus('');
             setPhase('no-match');
+            frames.length = 0; // Explicitly sweep array elements
             return;
         }
 
@@ -469,12 +516,6 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         }
         
         console.groupEnd();
-
-        frames.forEach(url => {
-            if (url !== bestUrl) {
-                URL.revokeObjectURL(url);
-            }
-        });
 
         setCapturedImage(bestUrl);
         setAnalysisStatus('');
@@ -540,24 +581,33 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
     // ── Navigation ───────────────────────────────────────────────────────────
     const handleRetake = useCallback(async () => {
-        setCapturedImage(prev => {
-            if (prev) URL.revokeObjectURL(prev);
-            return null;
-        });
+        setCapturedImage(null);
         resetSessionState();
         await startPreviewInHost();
         setPhase('preview');
     }, [resetSessionState, startPreviewInHost]);
 
     const handleCloseDialog = useCallback(async () => {
-        setCapturedImage(prev => {
-            if (prev) URL.revokeObjectURL(prev);
-            return null;
-        });
+        setCapturedImage(null);
         clearProgressAnimation();
         await stopPreview();
         onClose();
     }, [clearProgressAnimation, onClose, stopPreview]);
+
+    const handleHardwareBack = useCallback(() => {
+        if (phase === 'recording' || phase === 'analyzing') {
+            setConfirmExitOpen(true);
+        } else {
+            void handleCloseDialog();
+        }
+    }, [phase, handleCloseDialog]);
+
+    // ── Handle Landscape Rotation ────────────────────────────────────────────
+    useEffect(() => {
+        if (isLandscape && open) {
+            void handleCloseDialog();
+        }
+    }, [isLandscape, open, handleCloseDialog]);
 
     const handleAccept = useCallback(async () => {
         if (!capturedImage) return;
@@ -578,6 +628,7 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             hideBackdrop
             keepMounted
             open={open}
+            onClose={handleHardwareBack}
             PaperProps={{
                 sx: {
                     bgcolor: isCameraVisible ? 'transparent' : '#000',
@@ -611,7 +662,7 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         }}>
                             <IconButton
-                                onClick={() => void handleCloseDialog()}
+                                onClick={() => void handleHardwareBack()}
                                 sx={{
                                     color: 'white',
                                     bgcolor: 'rgba(0,0,0,0.3)',
@@ -898,6 +949,34 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
                     </Box>
                 )}
             </Box>
+
+            {/* ── Critical Abort Confirmation Dialog ── */}
+            <Dialog 
+                open={confirmExitOpen} 
+                onClose={() => setConfirmExitOpen(false)}
+                PaperProps={{
+                    sx: { borderRadius: 3, padding: 1, backgroundColor: '#1a1a1a', color: '#fff' }
+                }}
+            >
+                <DialogTitle sx={{ fontWeight: 700, color: '#ff4d4d' }}>Abort Scan?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                        You are currently in the middle of an AI scan. Are you sure you want to exit? All current progress will be lost and hardware memory will be scrubbed.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ padding: 2 }}>
+                    <Button onClick={() => setConfirmExitOpen(false)} sx={{ color: '#4ADE80', fontWeight: 600 }}>
+                        Resume
+                    </Button>
+                    <Button onClick={() => {
+                        setConfirmExitOpen(false);
+                        isCancelledRef.current = true; // Triggers the brutal frames.length = 0 GC sweeps we added!
+                        void handleCloseDialog();
+                    }} sx={{ color: '#ff4d4d', fontWeight: 700 }}>
+                        Exit & Clear RAM
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Dialog>
     );
 };

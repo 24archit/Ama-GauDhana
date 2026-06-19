@@ -1,6 +1,5 @@
 // Update client/src/App.tsx
 import React, { useEffect, useState } from 'react';
-import { preloadMuzzleModel } from '@gonidhi/shared';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useOutlet } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { CssBaseline, CircularProgress, Box, Typography, Stack } from '@mui/material';
@@ -10,19 +9,17 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './queryClient';
 import PageTransition from './components/PageTransition';
-import { syncManager } from '@gonidhi/shared';
 import { getServerHealthAPI } from './apis/apis';
 import { ProcessingProvider } from '@gonidhi/shared';
 import { GlobalProcessingOverlay } from '@gonidhi/shared';
 import { Geolocation } from '@capacitor/geolocation';
 import ocacLogo from '../src/assets/ocac.png';
 import iiitLogo from '../src/assets/iiit.png';
-// Add this near your other imports at the top
-import * as tf from '@tensorflow/tfjs';
-// Import Pages
 import AppLayout from './components/AppLayout';
 import Home from './pages/Home';
-// Lazy load heavy AI and camera routes
+import LandscapeOverlay from './components/LandscapeOverlay';
+import useMediaQuery from '@mui/material/useMediaQuery';
+
 const AddCow = React.lazy(() => import('@gonidhi/shared').then(module => ({ default: module.AddCow })));
 const SearchCow = React.lazy(() => import('@gonidhi/shared').then(module => ({ default: module.SearchCow })));
 import CowProfile from './pages/CowProfile';
@@ -148,6 +145,7 @@ const App: React.FC = () => {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isAppReady, setIsAppReady] = useState(false);
+  const isLandscape = useMediaQuery('(orientation: landscape)');
 
   useEffect(() => {
     // Yield to the browser render cycle first, then start health check
@@ -308,6 +306,7 @@ const App: React.FC = () => {
             </LocationGuard>
           </Router>
           <GlobalProcessingOverlay />
+          <LandscapeOverlay isLandscape={isLandscape} />
         </ProcessingProvider>
       </ThemeProvider>
     </QueryClientProvider>

@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Container, Paper, Typography, Box, Stepper, Step, StepButton,
-    Button, TextField, MenuItem, Stack, IconButton, Divider, InputAdornment,
+    Button, TextField, MenuItem, Stack, IconButton, Divider,
     SwipeableDrawer, List, ListItem, ListItemButton,
     ListItemIcon, ListItemText, Alert, AlertTitle, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import {
-    CameraAlt, ArrowForward, CheckCircle,
-    QrCodeScanner, Edit,
+    CameraAlt, ArrowForward, CheckCircle, Edit,
     PhotoLibrary, WifiOff
 } from '@mui/icons-material';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
@@ -63,7 +62,7 @@ interface CowFormData {
 
 interface StepProps {
     formData: CowFormData;
-    handleChange: (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+    handleChange: (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
     handlePhotoCapture?: (field: keyof CowFormData, img: string) => void;
     isAdmin?: boolean;
 }
@@ -98,12 +97,12 @@ const StepBasic: React.FC<StepProps> = ({ formData, handleChange, isAdmin }) => 
             />
         </Box>
 
-        <TextField 
-            fullWidth 
-            label="Cow Name (Optional)" 
-            placeholder="e.g., Gauri, Nandini" 
-            value={formData.name} 
-            onChange={handleChange('name')} 
+        <TextField
+            fullWidth
+            label="Cow Name (Optional)"
+            placeholder="e.g., Gauri, Nandini"
+            value={formData.name}
+            onChange={handleChange('name')}
         />
 
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
@@ -142,11 +141,12 @@ const StepBasic: React.FC<StepProps> = ({ formData, handleChange, isAdmin }) => 
             <TextField
                 fullWidth type="number" label="Age (Months)"
                 value={formData.ageMonths} onChange={(e) => {
-                    const val = parseInt(e.target.value);
+                    const target = e.target as HTMLInputElement;
+                    const val = parseInt(target.value);
                     if (val > 11) {
-                        e.target.value = '11';
+                        target.value = '11';
                     } else if (val < 0) {
-                        e.target.value = '0';
+                        target.value = '0';
                     }
                     handleChange('ageMonths')(e);
                 }}
@@ -488,13 +488,13 @@ const StepStats: React.FC<StepProps> = ({ formData, handleChange }) => (
                 </TextField>
 
                 {['Milking', 'Dry', 'Pregnant'].includes(formData.productionStatus) && (
-                    <TextField 
-                        type="number" 
-                        fullWidth 
-                        label="Calving Counter" 
+                    <TextField
+                        type="number"
+                        fullWidth
+                        label="Calving Counter"
                         helperText="Number of times the cow has given birth"
-                        value={formData.calvingCounter} 
-                        onChange={handleChange('calvingCounter')} 
+                        value={formData.calvingCounter}
+                        onChange={handleChange('calvingCounter')}
                     />
                 )}
             </>
@@ -581,11 +581,11 @@ const StepReview: React.FC<StepReviewProps> = ({ formData, setActiveStep, isAdmi
 
         <Paper elevation={0} sx={{ bgcolor: '#F9FAFB', p: 2, borderRadius: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                <input 
-                    type="checkbox" 
-                    id="agreement" 
-                    checked={formData.isInformationCorrectAgreement} 
-                    onChange={handleChange('isInformationCorrectAgreement')} 
+                <input
+                    type="checkbox"
+                    id="agreement"
+                    checked={formData.isInformationCorrectAgreement}
+                    onChange={handleChange('isInformationCorrectAgreement')}
                     style={{ marginTop: '4px', width: '20px', height: '20px', cursor: 'pointer' }}
                 />
                 <label htmlFor="agreement" style={{ fontSize: '0.875rem', cursor: 'pointer', lineHeight: 1.4 }}>
@@ -667,9 +667,9 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
             // Reached Step 3 (Visual ID)
             const loadModels = async () => {
                 startProcessing(
-                    'Initializing AI...', 
-                    'Warming up Neural Engines...', 
-                    true, 
+                    'Initializing AI...',
+                    'Warming up Neural Engines...',
+                    true,
                     'Please be patient. This one-time process may take about 2-3 minutes to securely compile the advanced AI models onto your device.'
                 );
                 try {
@@ -725,8 +725,9 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
         }
     }, [activeStep]);
 
-    const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const target = e.target as HTMLInputElement;
+        const value = target.type === 'checkbox' ? target.checked : target.value;
         setFormData((prev: CowFormData) => {
             return { ...prev, [field]: value };
         });
@@ -752,9 +753,9 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
 
         // Start processing and HIDE the Cancel button
         startProcessing(
-            'Registering Cow', 
-            'Confirming your live location for this submission.', 
-            true, 
+            'Registering Cow',
+            'Confirming your live location for this submission.',
+            true,
             'Please be patient and do not close the app. This secure API registration process may take about 10-12 minutes to analyze and upload to the national database.'
         );
 
@@ -922,10 +923,10 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
                         if (offlineDraft && offlineDraft.id) await syncManager.removePendingCow(offlineDraft.id);
                         await syncManager.savePendingCow({ ...formData, lat, lng });
                         localStorage.setItem('last_registration_time', Date.now().toString());
-                        setFeedback({ 
-                            type: 'SERVER_ERROR_SAVED', 
-                            title: 'Saved to Offline Sync', 
-                            message: 'Our servers are currently busy or unreachable. Your registration has been saved locally.' 
+                        setFeedback({
+                            type: 'SERVER_ERROR_SAVED',
+                            title: 'Saved to Offline Sync',
+                            message: 'Our servers are currently busy or unreachable. Your registration has been saved locally.'
                         });
                     } catch (localErr) {
                         console.error('Failed to save locally as fallback', localErr);
@@ -934,10 +935,10 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
                 } else {
                     // This is a 400-level validation error from the backend. 
                     // DO NOT save to sync-later queue. Tell the user to fix the data.
-                    setFeedback({ 
-                        type: 'ERROR', 
-                        title: 'Validation Error', 
-                        message: backendMsg || 'Please fix the errors in your form and try again.' 
+                    setFeedback({
+                        type: 'ERROR',
+                        title: 'Validation Error',
+                        message: backendMsg || 'Please fix the errors in your form and try again.'
                     });
                 }
             }
@@ -965,7 +966,7 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
     }, [navigate]);
 
     useEffect(() => {
-        const backListener = CapacitorApp.addListener('backButton', (listener: any) => {
+        const backListener = CapacitorApp.addListener('backButton', () => {
             if (activeStep > 0) {
                 handleBack();
             } else {

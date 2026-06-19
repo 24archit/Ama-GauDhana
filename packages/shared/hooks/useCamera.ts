@@ -2,15 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { CameraPreview, type CameraPreviewOptions } from '@capacitor-community/camera-preview';
 import { Capacitor } from '@capacitor/core';
 
-const base64ToBlob = (base64: string, mimeType = 'image/webp'): Blob => {
-    const byteString = atob(base64);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-    }
-    return new Blob([ab], { type: mimeType });
-};
+// Helper removed: We now use raw base64 data URIs for memory safety and direct file uploads
 
 export interface CameraState {
     isActive: boolean;
@@ -22,6 +14,7 @@ export interface CameraState {
 
 export const useCamera = () => {
     const [media, setMedia] = useState<string | null>(null);
+
     const [cameraState, setCameraState] = useState<CameraState>({
         isActive: false,
         isRecording: false,
@@ -124,10 +117,9 @@ export const useCamera = () => {
             const sample = await CameraPreview.captureSample({ quality: 85 });
             if (!sample?.value) return null;
 
-            const blob = base64ToBlob(sample.value);
-            const blobUrl = URL.createObjectURL(blob);
-            setMedia(blobUrl);
-            return blobUrl;
+            const base64Url = `data:image/webp;base64,${sample.value}`;
+            setMedia(base64Url);
+            return base64Url;
         } catch (error) {
             console.error('Photo capture failed:', error);
             return null;
@@ -146,15 +138,14 @@ export const useCamera = () => {
             while (Date.now() - startedAt < durationMs) {
                 const sample = await CameraPreview.captureSample({ quality: 85 });
                 if (sample?.value) {
-                    const blob = base64ToBlob(sample.value);
-                    const blobUrl = URL.createObjectURL(blob);
-                    frameUrls.push(blobUrl);
+                    frameUrls.push(`data:image/webp;base64,${sample.value}`);
                 }
                 await new Promise(resolve => setTimeout(resolve, intervalMs));
             }
 
             setCameraState(prev => ({ ...prev, isRecording: false }));
-            setMedia(frameUrls[frameUrls.length - 1] ?? null);
+            const lastUrl = frameUrls[frameUrls.length - 1] ?? null;
+            setMedia(lastUrl);
             return frameUrls;
         } catch (error) {
             console.error('Frame capture failed:', error);
@@ -205,7 +196,7 @@ export const useCamera = () => {
             if (cp.getSupportedFlashModes) {
                 const { result } = await cp.getSupportedFlashModes();
                 const modes: string[] = result || [];
-                
+
                 if (modes.includes('torch')) {
                     await CameraPreview.setFlashMode({ flashMode: 'torch' });
                     return true;
