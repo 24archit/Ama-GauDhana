@@ -362,7 +362,6 @@ async def _process_registration_impl(payload: dict, notify_webhook: bool = True,
         "farmer_id": farmer_id,
         "status": match_status,
         "matched_cow_id": matched_cow_id,
-        "superpoint_cache": muzzle_superpoint_cache if 'muzzle_superpoint_cache' in locals() else None,
         "error_message": verdict.get("user_reason", "N/A"),
         "telemetry": telemetry_data
     }
@@ -374,7 +373,6 @@ async def _process_registration_impl(payload: dict, notify_webhook: bool = True,
                 "farmer_id": farmer_id,
                 "status": match_status,
                 "matched_cow_id": matched_cow_id,
-                "superpoint_cache": result["superpoint_cache"],
                 "error_message": verdict.get("user_reason", "N/A"),
                 "telemetry": telemetry_data
             })
