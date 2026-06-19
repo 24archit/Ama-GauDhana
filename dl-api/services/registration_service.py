@@ -13,9 +13,6 @@ from services.fusion_service import compute_cosine_similarity, evaluate_biometri
 from services.tournament_service import run_biometric_tournament, compute_traditional_metrics
 from services.telemetry_builder import build_telemetry_payload
 
-async def cleanup_job_async(cow_id: str, delay: int = 300):
-    await asyncio.sleep(delay)
-    glb.active_jobs.pop(cow_id, None)
 
 async def process_registration_safe(payload: dict):
     if glb.gpu_queue_size >= 5:
@@ -36,6 +33,14 @@ async def process_registration_safe(payload: dict):
         print(f"Error processing async registration: {e}")
     finally:
         glb.gpu_queue_size -= 1
+        
+    # Keep the job result in memory for 5 minutes so client polling can fetch it.
+    try:
+        await asyncio.sleep(300)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        glb.active_jobs.pop(payload.get("cow_id"), None)
 
 def get_job_status(cow_id: str):
     if cow_id in glb.active_jobs:
@@ -98,8 +103,6 @@ async def process_registration(payload: dict, notify_webhook: bool = True, fasta
             except Exception as webhook_err:
                 print(f"Failed to send registration failure webhook: {webhook_err}")
         raise worker_err
-    finally:
-        asyncio.create_task(cleanup_job_async(cow_id))
 
 async def _process_registration_impl(payload: dict, notify_webhook: bool = True, fastapi_req: Request = None) -> dict:
     start_time = time.time()
