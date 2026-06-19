@@ -21,7 +21,7 @@ from api.router import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading models and initializing AI Engine...")
+    print("Loading models and initializing AI Engine...", flush=True)
     base_dir = os.path.dirname(__file__)
 
     # Load XGBoost Ensembler
@@ -29,9 +29,9 @@ async def lifespan(app: FastAPI):
     xgb_path = os.path.join(base_dir, "models", "xgb_biometric_model.json")
     if os.path.exists(xgb_path):
         glb.xgb_model.load_model(xgb_path)
-        print(f"XGBoost Ensembler Loaded from {xgb_path}")
+        print(f"XGBoost Ensembler Loaded from {xgb_path}", flush=True)
     else:
-        print("WARNING: XGBoost model not found!")
+        print("WARNING: XGBoost model not found!", flush=True)
 
     # Load Deep Learning Pipeline
     glb.dl = DLPipeline(
@@ -42,18 +42,18 @@ async def lifespan(app: FastAPI):
     )
     
     # Initialize Vector DB Connection
-    print(f"Connecting to Qdrant at {QDRANT_URL}...")
+    print(f"Connecting to Qdrant at {QDRANT_URL}...", flush=True)
     glb.db = CattleVectorStore(
         qdrant_url=QDRANT_URL,
         qdrant_api_key=QDRANT_API_KEY,
         vector_size=EMBEDDING_VECTOR_SIZE
     )
     
-    print("System Ready.")
+    print("System Ready.", flush=True)
     
     yield  # Yield control to FastAPI app
     
-    print("Shutting down...")
+    print("Shutting down...", flush=True)
 
 # Initialize FastAPI
 app = FastAPI(lifespan=lifespan)

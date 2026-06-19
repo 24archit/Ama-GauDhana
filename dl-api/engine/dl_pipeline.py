@@ -133,7 +133,7 @@ class DLPipeline:
     def __init__(self, yolo_face_path: str, yolo_muzzle_path: str, embedding_model_path: str, spoof_path: str = None):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.use_gpu = self.device == "cuda"
-        print(f"Loading DL Models on {self.device.upper()}...")
+        print(f"Loading DL Models on {self.device.upper()}...", flush=True)
         
         # GPU-specific optimizations
         if self.use_gpu:
@@ -141,7 +141,7 @@ class DLPipeline:
             torch.backends.cuda.matmul.allow_tf32 = True   # Allow TF32 for faster matrix multiplications
             torch.backends.cudnn.allow_tf32 = True          # Allow TF32 in cuDNN convolutions
             torch.set_float32_matmul_precision('high')      # Global PyTorch 2.0+ TF32 enablement
-            print("Enabled: cuDNN benchmark, TF32 matmul (high precision), TF32 cuDNN")
+            print("Enabled: cuDNN benchmark, TF32 matmul (high precision), TF32 cuDNN", flush=True)
         
         self.yolo_face = YOLO(yolo_face_path)
         self.yolo_muzzle = YOLO(yolo_muzzle_path)
@@ -188,12 +188,12 @@ class DLPipeline:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        print(f"Loading Cow Classifier Model...")
+        print(f"Loading Cow Classifier Model...", flush=True)
         hf_device = 0 if self.use_gpu else -1
         hf_dtype = torch.float16 if self.use_gpu else torch.float32
         self.cow_classifier = pipeline("image-classification", model="google/vit-base-patch16-224", device=hf_device, torch_dtype=hf_dtype)
 
-        print(f"Loading Spatial Attention Headless Models...")
+        print(f"Loading Spatial Attention Headless Models...", flush=True)
         import os
         try:
             self.headless_muzzle_model = extract_headless_model(os.path.join(os.path.dirname(__file__), "..", "models", "MuzzleCMPD568.keras"))
@@ -205,10 +205,10 @@ class DLPipeline:
         
         # CUDA Warmup — pre-allocate memory and compile lazy kernels so the first real request is fast
         if self.use_gpu:
-            print("Running CUDA warmup pass...")
+            print("Running CUDA warmup pass...", flush=True)
             self._cuda_warmup()
-            print(f"GPU Optimization Summary: FP16 models, cuDNN benchmark, TF32 matmul, TF mixed_float16, torch.compile, CUDA warmup")
-        print(f"All models loaded on {self.device.upper()}.")
+            print(f"GPU Optimization Summary: FP16 models, cuDNN benchmark, TF32 matmul, TF mixed_float16, torch.compile, CUDA warmup", flush=True)
+        print(f"All models loaded on {self.device.upper()}.", flush=True)
 
     def _cuda_warmup(self):
         """Run dummy inference through all models to pre-allocate CUDA memory and JIT-compile kernels."""
