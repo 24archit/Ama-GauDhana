@@ -15,6 +15,7 @@ export default defineConfig({
     format: "es"
   },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 1200, 
     rollupOptions: {
       output: {
@@ -38,5 +39,8 @@ export default defineConfig({
         }
       }
     }
+  },
+  esbuild: {
+    drop: ['console', 'debugger'],
   }
 })

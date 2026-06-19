@@ -30,6 +30,8 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
     const muzzleModelRef = useRef<tf.GraphModel | null>(null);
     const nimaModelRef = useRef<tf.GraphModel | null>(null);
     const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const sharedImagePoolRef = useRef<HTMLImageElement | null>(null);
+    const sharedCanvasPoolRef = useRef<HTMLCanvasElement | null>(null);
     const previewHostRef = useRef<HTMLDivElement | null>(null);
     const progressRafRef = useRef<number | null>(null);
     const isCancelledRef = useRef<boolean>(false);
@@ -51,10 +53,18 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         canvas.width = FRAME_W;
         canvas.height = FRAME_H;
         captureCanvasRef.current = canvas;
+        sharedImagePoolRef.current = new Image();
+        sharedCanvasPoolRef.current = document.createElement('canvas');
 
         return () => { 
             isCancelledRef.current = true;
+            if (captureCanvasRef.current) {
+                captureCanvasRef.current.width = 0;
+                captureCanvasRef.current.height = 0;
+            }
             captureCanvasRef.current = null; 
+            sharedImagePoolRef.current = null;
+            sharedCanvasPoolRef.current = null;
         };
     }, []);
 
@@ -126,10 +136,36 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         setFlash(false);
     }, []);
 
-    // ── Emergency Cleanup on Unmount ─────────────────────────────────────────
-    useEffect(() => {
-        // No manual revoke needed anymore, base64 strings garbage collect automatically
+    const scrubCanvasAndImage = useCallback((canvas: HTMLCanvasElement | null, img: HTMLImageElement | null) => {
+        if (canvas) {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+        if (img) {
+            img.src = '';
+            img.onload = null;
+            img.onerror = null;
+        }
     }, []);
+
+    const abortAndCleanup = useCallback(async () => {
+        isCancelledRef.current = true;
+        clearProgressAnimation();
+        try { await stopPreview(); } catch {
+            // ignore cleanup failures
+        }
+        resetSessionState();
+        setPhase('idle');
+    }, [clearProgressAnimation, resetSessionState, stopPreview]);
+
+    useEffect(() => {
+        return () => {
+            isCancelledRef.current = true;
+            clearProgressAnimation();
+            stopPreview().catch(() => null);
+            resetSessionState();
+        };
+    }, [clearProgressAnimation, resetSessionState, stopPreview]);
 
     const startPreviewInHost = useCallback(async (position?: 'rear' | 'front') => {
         await startPreview({
@@ -164,8 +200,10 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         };
 
         if (open) {
+            isCancelledRef.current = false;
             void bootPreview();
         } else {
+            isCancelledRef.current = true;
             clearProgressAnimation();
             void stopPreview();
             setPhase('idle');
@@ -204,12 +242,15 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         let imgElement: HTMLImageElement | null = null;
 
         try {
-            const img = new Image();
+            const img = sharedImagePoolRef.current;
+            if (!img) throw new Error("Image pool not initialized");
             imgElement = img;
             const loaded = new Promise((resolve, reject) => {
                 img.onload = async () => {
                     // Force the browser to fully decode/rasterize the image pixels into memory 
                     try { await img.decode(); } catch { /* ignore unsupported */ }
+                    // Micro-yield: Let the mobile CPU physically move the uncompressed bitmap into RAM before we lock it for WebGL
+                    await new Promise(r => setTimeout(r, 25));
                     resolve(null);
                 };
                 img.onerror = reject;
@@ -224,11 +265,12 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             const startX = Math.floor((w - size) / 2);
 
             // Hardware accelerated off-screen canvas downscaling (95% VRAM savings)
-            const canvas = document.createElement('canvas');
+            const canvas = sharedCanvasPoolRef.current;
+            if (!canvas) throw new Error("Canvas pool not initialized");
             canvasElement = canvas;
             canvas.width = FRAME_W;
             canvas.height = FRAME_H;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (!ctx) throw new Error('No 2d context');
 
             ctx.imageSmoothingEnabled = true;
@@ -244,6 +286,9 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             });
 
             output = await muzzleModelRef.current.executeAsync(inputTensor);
+            // Yield to event loop: Give the GPU time to flush intermediate math vectors before we parse the output
+            await new Promise(r => setTimeout(r, 50));
+            
             const primary = Array.isArray(output) ? output[0] : output;
 
             return await parseModelOutput(primary);
@@ -253,19 +298,9 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         } finally {
             if (inputTensor) inputTensor.dispose();
             if (output) tf.dispose(output);
-            
-            // 🔥 BRUTAL RAM CLEANUP: Explicitly destroy the canvas buffer and Image object
-            if (canvasElement) {
-                canvasElement.width = 0;
-                canvasElement.height = 0;
-            }
-            if (imgElement) {
-                imgElement.src = '';
-                imgElement.onload = null;
-                imgElement.onerror = null;
-            }
+            scrubCanvasAndImage(canvasElement, imgElement);
         }
-    }, []);
+    }, [scrubCanvasAndImage]);
 
     const evaluateNIMA = useCallback(async (imgUrl: string): Promise<number> => {
         if (!nimaModelRef.current) return 0;
@@ -275,11 +310,14 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         let imgElement: HTMLImageElement | null = null;
         
         try {
-            const img = new Image();
+            const img = sharedImagePoolRef.current;
+            if (!img) throw new Error("Image pool not initialized");
             imgElement = img;
             const loaded = new Promise((resolve, reject) => {
                 img.onload = async () => {
                     try { await img.decode(); } catch { /* ignore unsupported */ }
+                    // Micro-yield: Allow RAM stabilization
+                    await new Promise(r => setTimeout(r, 25));
                     resolve(null);
                 };
                 img.onerror = reject;
@@ -294,11 +332,12 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             const startX = Math.floor((w - size) / 2);
 
             // Hardware accelerated off-screen canvas downscaling
-            const canvas = document.createElement('canvas');
+            const canvas = sharedCanvasPoolRef.current;
+            if (!canvas) throw new Error("Canvas pool not initialized");
             canvasElement = canvas;
             canvas.width = 224;
             canvas.height = 224;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (!ctx) throw new Error('No 2d context');
 
             ctx.imageSmoothingEnabled = true;
@@ -314,6 +353,9 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             });
 
             predictions = nimaModelRef.current.predict(inputTensor) as tf.Tensor;
+            // Yield to event loop: Give the GPU time to flush NIMA's deep convolutions
+            await new Promise(r => setTimeout(r, 50));
+
             const predictionData = await predictions.data();
             const nimaScore = computeNIMAScore(predictionData);
 
@@ -324,19 +366,9 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         } finally {
             if (inputTensor) inputTensor.dispose();
             if (predictions) predictions.dispose();
-            
-            // 🔥 BRUTAL RAM CLEANUP
-            if (canvasElement) {
-                canvasElement.width = 0;
-                canvasElement.height = 0;
-            }
-            if (imgElement) {
-                imgElement.src = '';
-                imgElement.onload = null;
-                imgElement.onerror = null;
-            }
+            scrubCanvasAndImage(canvasElement, imgElement);
         }
-    }, []);
+    }, [scrubCanvasAndImage]);
 
     // ── Frame analysis with % progress ──────────────────────────────────────
     const analyzeCapturedFrames = useCallback(async (frames: string[]) => {
@@ -351,20 +383,22 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
         try {
             if (isAIScan && muzzleModelRef.current) {
+                tf.engine().startScope();
                 const warmupTensor = tf.zeros([1, FRAME_H, FRAME_W, 3]);
                 const warmupOut = await muzzleModelRef.current.executeAsync(warmupTensor) as tf.Tensor | tf.Tensor[];
                 if (Array.isArray(warmupOut)) warmupOut.forEach(t => t.dispose());
                 else warmupOut.dispose();
                 warmupTensor.dispose();
+                tf.engine().endScope();
             }
             if (nimaModelRef.current) {
+                tf.engine().startScope();
                 const warmupTensor = tf.zeros([1, 224, 224, 3]);
                 const warmupOut = nimaModelRef.current.predict(warmupTensor) as tf.Tensor;
                 warmupOut.dispose();
                 warmupTensor.dispose();
+                tf.engine().endScope();
             }
-            // Allow WebGL to finish dummy execution and stabilize memory on slower mobile GPUs
-            // Giving ample time here guarantees 100% flawless memory states.
             await new Promise(resolve => setTimeout(resolve, 1500));
         } catch (e) {
             console.warn("Model warmup failed:", e);
@@ -393,11 +427,11 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
         tf.engine().startScope();
         try {
             for (let index = 0; index < frames.length; index += 1) {
-            if (isCancelledRef.current) {
-                console.log("🛑 AI Analysis forcefully halted to clear RAM/VRAM.");
-                break;
-            }
-            const frame = frames[index];
+                if (isCancelledRef.current) {
+                    console.log("🛑 AI Analysis forcefully halted to clear RAM/VRAM.");
+                    break;
+                }
+                const frame = frames[index];
 
             if (isAIScan) {
                 const detection = await evaluateFrame(frame);
@@ -405,6 +439,10 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
                 console.log(`[Frontend] Frame ${index + 1}/${frames.length} | Det Conf: ${(detection.conf * 100).toFixed(2)}% | Base Quality: ${quality.score}`);
 
                 if (detection.conf >= MUZZLE_CONF_THRESHOLD) {
+                    // CRITICAL YIELD: We just ran a heavy Muzzle AI model. 
+                    // We MUST let the GPU and V8 Garbage Collector breathe before slamming it with the NIMA model.
+                    await new Promise(r => setTimeout(r, 75));
+
                     setAnalysisStatus(`Analysing...`);
                     const nimaScore = await evaluateNIMA(frame);
 
@@ -444,12 +482,11 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
             await new Promise(resolve => setTimeout(resolve, 60));
         }
         } finally {
-            // End scope to physically wipe any hanging intermediate tensors from GPU VRAM
             tf.engine().endScope();
+            frames.length = 0; // Explicitly sever array elements to trigger forced GC sweep of massive base64 strings
         }
 
         if (isCancelledRef.current) {
-            frames.length = 0; // Explicitly sever array elements to trigger forced GC sweep of massive base64 strings
             console.log("🧹 RAM safely scrubbed: Inference loop broken. GC will collect arrays.");
             return;
         }
@@ -581,18 +618,20 @@ export const HTML5CameraDialog: React.FC<HTML5CameraDialogProps> = ({ open, onCl
 
     // ── Navigation ───────────────────────────────────────────────────────────
     const handleRetake = useCallback(async () => {
+        isCancelledRef.current = true;
+        clearProgressAnimation();
         setCapturedImage(null);
         resetSessionState();
+        await stopPreview();
         await startPreviewInHost();
+        isCancelledRef.current = false;
         setPhase('preview');
-    }, [resetSessionState, startPreviewInHost]);
+    }, [clearProgressAnimation, resetSessionState, startPreviewInHost, stopPreview]);
 
     const handleCloseDialog = useCallback(async () => {
-        setCapturedImage(null);
-        clearProgressAnimation();
-        await stopPreview();
+        await abortAndCleanup();
         onClose();
-    }, [clearProgressAnimation, onClose, stopPreview]);
+    }, [abortAndCleanup, onClose]);
 
     const handleHardwareBack = useCallback(() => {
         if (phase === 'recording' || phase === 'analyzing') {

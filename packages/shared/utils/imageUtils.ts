@@ -29,12 +29,23 @@ export const optimizeCloudinaryUrl = (url: string, width: number = 500): string 
 export const resizeImage = (base64Str: string, maxWidth: number = 1080, quality: number = 0.85): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.src = base64Str;
+        let canvas: HTMLCanvasElement | null = null;
+
+        const cleanup = () => {
+            if (canvas) {
+                canvas.width = 0;
+                canvas.height = 0;
+                canvas = null;
+            }
+            img.src = '';
+            img.onload = null;
+            img.onerror = null;
+        };
+
         img.onload = () => {
             let width = img.width;
             let height = img.height;
 
-            // Calculate new dimensions
             if (width > height) {
                 if (width > maxWidth) {
                     height = Math.round((height * maxWidth) / width);
@@ -47,27 +58,31 @@ export const resizeImage = (base64Str: string, maxWidth: number = 1080, quality:
                 }
             }
 
-            const canvas = document.createElement('canvas');
+            canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
 
             const ctx = canvas.getContext('2d');
             if (!ctx) {
+                cleanup();
                 reject(new Error('Could not get canvas context'));
                 return;
             }
 
-            // High quality scaling
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
             const result = canvas.toDataURL('image/webp', quality);
-            // Explicitly free the canvas memory immediately
-            canvas.width = 0;
-            canvas.height = 0;
+            cleanup();
             resolve(result);
         };
-        img.onerror = (err) => reject(err);
+
+        img.onerror = (err) => {
+            cleanup();
+            reject(err);
+        };
+
+        img.src = base64Str;
     });
 };
 // Helper function to convert a Base64 string into a physical File object
@@ -90,6 +105,19 @@ export const base64ToFile = (base64String: string | File | unknown, filename: st
 export const compressImage = (dataUrl: string, maxWidth = 1080, maxHeight = 1080, quality = 0.85): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new Image();
+        let canvas: HTMLCanvasElement | null = null;
+
+        const cleanup = () => {
+            if (canvas) {
+                canvas.width = 0;
+                canvas.height = 0;
+                canvas = null;
+            }
+            img.src = '';
+            img.onload = null;
+            img.onerror = null;
+        };
+
         img.onload = () => {
             let { width, height } = img;
 
@@ -100,31 +128,35 @@ export const compressImage = (dataUrl: string, maxWidth = 1080, maxHeight = 1080
                 }
             } else {
                 if (height > maxHeight) {
-                    width *= maxHeight / height;
+                    width *= maxHeight / width;
                     height = maxHeight;
                 }
             }
 
-            const canvas = document.createElement('canvas');
+            canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
-            if (!ctx) return resolve(dataUrl);
+            if (!ctx) {
+                cleanup();
+                resolve(dataUrl);
+                return;
+            }
 
-            // OPTIONAL BUT RECOMMENDED: Add image smoothing for better downscaling
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
             ctx.drawImage(img, 0, 0, width, height);
-
-            // Use the dynamic quality parameter here, exporting as highly-efficient WebP
             const result = canvas.toDataURL('image/webp', quality);
-            // Explicitly free RAM
-            canvas.width = 0;
-            canvas.height = 0;
+            cleanup();
             resolve(result);
         };
-        img.onerror = reject;
+
+        img.onerror = (err) => {
+            cleanup();
+            reject(err);
+        };
+
         img.src = dataUrl;
     });
 };

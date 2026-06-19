@@ -3,7 +3,7 @@ import { Box, Typography } from '@mui/material';
 import type { CameraGuidanceType } from './types';
 import { RING_R, RING_CIRCUM } from './constants';
 
-export const ProgressRing: React.FC<{ progress: number; recording: boolean }> = ({ progress, recording }) => (
+export const ProgressRing: React.FC<{ progress: number; recording: boolean }> = React.memo(({ progress, recording }) => (
     <svg width="90" height="90" style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
         <circle cx="45" cy="45" r={RING_R} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="5" />
         <circle
@@ -19,9 +19,9 @@ export const ProgressRing: React.FC<{ progress: number; recording: boolean }> = 
             style={{ transition: recording ? 'stroke-dashoffset 80ms linear' : 'none' }}
         />
     </svg>
-);
+));
 
-export const CountdownDisplay: React.FC<{ secondsLeft: number }> = ({ secondsLeft }) => (
+export const CountdownDisplay: React.FC<{ secondsLeft: number }> = React.memo(({ secondsLeft }) => (
     <Box sx={{ position: 'absolute', top: '18%', left: '50%', transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none' }}>
         <Typography sx={{
             fontSize: 72,
@@ -34,9 +34,9 @@ export const CountdownDisplay: React.FC<{ secondsLeft: number }> = ({ secondsLef
             {secondsLeft}
         </Typography>
     </Box>
-);
+));
 
-export const OvalGuide: React.FC<{ recording: boolean; guidanceType: CameraGuidanceType }> = ({ recording, guidanceType }) => {
+export const OvalGuide: React.FC<{ recording: boolean; guidanceType: CameraGuidanceType }> = React.memo(({ recording, guidanceType }) => {
     if (guidanceType === 'none') return null;
 
     const labelMap: Record<Exclude<CameraGuidanceType, 'none'>, string> = {
@@ -148,9 +148,9 @@ export const OvalGuide: React.FC<{ recording: boolean; guidanceType: CameraGuida
             </Box>
         </Box>
     );
-};
+});
 
-export const AnalysisOverlay: React.FC<{ status: string; progress: number }> = ({ status, progress }) => (
+export const AnalysisOverlay: React.FC<{ status: string; progress: number }> = React.memo(({ status, progress }) => (
     <Box sx={{
         position: 'absolute', inset: 0, zIndex: 100,
         bgcolor: 'rgba(0,0,0,0.92)',
@@ -194,4 +194,4 @@ export const AnalysisOverlay: React.FC<{ status: string; progress: number }> = (
 
         <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
     </Box>
-);
+));

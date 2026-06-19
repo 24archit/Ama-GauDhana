@@ -22,11 +22,20 @@ export const preloadMuzzleModel = (): Promise<tf.GraphModel> => {
     loadPromise = (async () => {
         try {
             await tf.ready();
+            // Yield event loop so UI animations (like spinners) can render before massive JSON parsing blocks the thread
+            await new Promise(r => setTimeout(r, 100));
+
             const loadedModel = await tf.loadGraphModel(MODEL_URL);
+
+            // Yield again before compiling WebGL shaders (which synchronously locks the GPU/CPU)
+            await new Promise(r => setTimeout(r, 100));
 
             // WebGL Shader Warm-up (Crucial for instant first-inference)
             const dummy = tf.zeros([1, MODEL_INPUT_SIZE[0], MODEL_INPUT_SIZE[1], 3]);
             const warmupResult = await loadedModel.executeAsync(dummy);
+
+            // Yield after heavy shader compilation so the UI can catch up
+            await new Promise(r => setTimeout(r, 50));
 
             // Clean up memory safely (handles array of tensors or single tensor)
             tf.dispose(warmupResult);
@@ -58,11 +67,21 @@ export const preloadNimaModel = (): Promise<tf.GraphModel> => {
     nimaLoadPromise = (async () => {
         try {
             await tf.ready();
+            
+            // Yield event loop to allow UI to breathe
+            await new Promise(r => setTimeout(r, 100));
+
             const nima = await tf.loadGraphModel('/model/nima/model.json');
+
+            // Yield event loop before compiling NIMA shaders
+            await new Promise(r => setTimeout(r, 100));
 
             // Warm-up NIMA to compile its WebGL shaders
             const dummy = tf.zeros([1, 224, 224, 3]);
             const warmup = nima.predict(dummy) as tf.Tensor;
+            
+            // Final breather after shader compilation
+            await new Promise(r => setTimeout(r, 50));
             tf.dispose([warmup, dummy]);
 
             cachedNimaModel = nima;

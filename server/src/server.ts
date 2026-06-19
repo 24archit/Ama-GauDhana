@@ -10,6 +10,7 @@ import rateLimit from 'express-rate-limit';
 import connectDB from "./config/db";
 import { initJobs } from "./jobs";
 import { errorHandler } from "./middleware/errorHandler";
+import { noSqlSanitize } from "./middleware/sanitize";
 
 import pinoHttp from 'pino-http';
 import logger from './utils/logger';
@@ -75,8 +76,11 @@ const corsOptionsDelegate = (req: any, callback: any) => {
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Global payload limit set to 2mb to prevent DDoS memory exhaustion. 
+// Biometric upload endpoints will override this locally if needed.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ limit: '2mb', extended: true }));
+app.use(noSqlSanitize); // Sanitize ALL incoming payloads before they hit routers
 app.use(cors(corsOptionsDelegate));
 
 app.use(pinoHttp({ logger }));
