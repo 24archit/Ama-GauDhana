@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { uploadBufferToCloudinary, deleteFromCloudinary } from './cloudinaryService';
 import { dlApiClient } from '../utils/dlApiClient';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import { deleteCowVectors } from '../utils/qdrantClient';
 
@@ -52,6 +53,24 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
         throw err;
     }
 
+    const faceProfileFile = files.faceImage[0];
+    const muzzleFile = files.muzzleImage[0];
+
+    // Compute an image hash for robust idempotency checking, even when tagNo is absent
+    const imageHash = crypto.createHash('sha256').update(muzzleFile.buffer).digest('hex');
+
+    // 3. Idempotency Check via Image Hash
+    const existingWithHash = await Cattle.findOne({ farmerId, 'photos.imageHash': imageHash });
+    if (existingWithHash) {
+        if (existingWithHash.aiMetadata?.status === 'SUCCESS' || existingWithHash.aiMetadata?.status === 'PROCESSING_RESULT' || existingWithHash.isDispute) {
+            logger.info(`Idempotent retry detected via imageHash for farmer ${farmerId}. Returning existing cow.`);
+            return existingWithHash;
+        } else if (existingWithHash.aiMetadata?.status === 'PENDING') {
+            const err = new Error('This cow is currently being processed. Please wait for the result.');
+            (err as any).statusCode = 400;
+            throw err;
+        }
+    }
 
     let uploadedFiles: string[] = [];
     let savedCow: any = null;
@@ -70,24 +89,31 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
             return await safeUpload(file.buffer);
         };
 
-        const faceProfileFile = files.faceImage[0];
-        const muzzleFile = files.muzzleImage[0];
-
         let faceProfileCloudinary, muzzleCloudinary, leftProfileCloudinary, rightProfileCloudinary, backViewCloudinary, tailViewCloudinary, selfieCloudinary;
         let faceTelemetryCloudinary, muzzleTelemetryCloudinary;
 
         try {
-            faceProfileCloudinary = await safeUpload(faceProfileFile.buffer);
-            muzzleCloudinary = await safeUpload(muzzleFile.buffer);
-            leftProfileCloudinary = await safeUploadIfPresent(files.leftImage);
-            rightProfileCloudinary = await safeUploadIfPresent(files.rightImage);
-            backViewCloudinary = await safeUploadIfPresent(files.backImage);
-            tailViewCloudinary = await safeUploadIfPresent(files.tailImage);
-            selfieCloudinary = await safeUploadIfPresent(files.selfieImage);
-
-            // Telemetry uploads
-            faceTelemetryCloudinary = await safeUpload(faceProfileFile.buffer, 'gonidhi-telemetry');
-            muzzleTelemetryCloudinary = await safeUpload(muzzleFile.buffer, 'gonidhi-telemetry');
+            [
+                faceProfileCloudinary,
+                muzzleCloudinary,
+                leftProfileCloudinary,
+                rightProfileCloudinary,
+                backViewCloudinary,
+                tailViewCloudinary,
+                selfieCloudinary,
+                faceTelemetryCloudinary,
+                muzzleTelemetryCloudinary
+            ] = await Promise.all([
+                safeUpload(faceProfileFile.buffer),
+                safeUpload(muzzleFile.buffer),
+                safeUploadIfPresent(files.leftImage),
+                safeUploadIfPresent(files.rightImage),
+                safeUploadIfPresent(files.backImage),
+                safeUploadIfPresent(files.tailImage),
+                safeUploadIfPresent(files.selfieImage),
+                safeUpload(faceProfileFile.buffer, 'gonidhi-telemetry'),
+                safeUpload(muzzleFile.buffer, 'gonidhi-telemetry')
+            ]);
         } catch (uploadError) {
             logger.error(uploadError, 'Error during image uploads, rolling back:');
             const err = new Error('Failed to upload images. Please try again.');
@@ -123,7 +149,8 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
                 rightProfile: rightProfileCloudinary,
                 backView: backViewCloudinary,
                 tailView: tailViewCloudinary,
-                selfie: selfieCloudinary
+                selfie: selfieCloudinary,
+                imageHash: imageHash
             },
             aiMetadata: {
                 isRegistered: false,
@@ -185,10 +212,30 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
             cow_name: name,
             face_image_url: faceTelemetryCloudinary,
             muzzle_image_url: muzzleTelemetryCloudinary
-        }).catch((apiError: any) => {
-            logger.error(apiError.message || apiError, 'Error triggering DL-API in background:');
-            // We do not throw an error here. We will rely on manual retry or sync mechanisms 
-            // if the cow remains in PENDING status.
+        }).catch(async (apiError: any) => {
+            logger.error(apiError.message || apiError, 'Error triggering DL-API in background. Rolling back ghost cow...');
+            
+            try {
+                let deletedCow: any = null;
+                const session = await mongoose.startSession();
+                try {
+                    await session.withTransaction(async () => {
+                        deletedCow = await Cattle.findOneAndDelete({ _id: savedCow._id, 'aiMetadata.status': 'PENDING' }, { session });
+                        if (deletedCow) {
+                            await User.findByIdAndUpdate(farmerId, { $pull: { cows: deletedCow._id } }, { session });
+                        }
+                    });
+                } finally {
+                    await session.endSession();
+                }
+
+                if (deletedCow) {
+                    await cleanupCowCloudResources(deletedCow);
+                    logger.info(`[Sync] Successfully rolled back ghost cow ${savedCow._id}`);
+                }
+            } catch (rollbackErr) {
+                logger.error(rollbackErr, 'Failed to execute instant rollback for ghost cow:');
+            }
         });
 
         return savedCow;
@@ -209,8 +256,8 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
         } catch (rollbackErr) {
             logger.error(rollbackErr, 'Error executing DB rollback:');
         } finally {
-            for (const fileUrl of uploadedFiles) {
-                await deleteFromCloudinary(fileUrl).catch(() => { });
+            if (uploadedFiles.length > 0) {
+                await Promise.all(uploadedFiles.map(fileUrl => deleteFromCloudinary(fileUrl).catch(() => { })));
             }
         }
         throw error;
@@ -220,13 +267,18 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
 export const cleanupCowCloudResources = async (cow: any) => {
     try {
         if (cow.photos) {
-            if (cow.photos.faceProfile) await deleteFromCloudinary(cow.photos.faceProfile).catch(() => { });
-            if (cow.photos.muzzle) await deleteFromCloudinary(cow.photos.muzzle).catch(() => { });
-            if (cow.photos.leftProfile) await deleteFromCloudinary(cow.photos.leftProfile).catch(() => { });
-            if (cow.photos.rightProfile) await deleteFromCloudinary(cow.photos.rightProfile).catch(() => { });
-            if (cow.photos.backView) await deleteFromCloudinary(cow.photos.backView).catch(() => { });
-            if (cow.photos.tailView) await deleteFromCloudinary(cow.photos.tailView).catch(() => { });
-            if (cow.photos.selfie) await deleteFromCloudinary(cow.photos.selfie).catch(() => { });
+            const deletePromises = [];
+            if (cow.photos.faceProfile) deletePromises.push(deleteFromCloudinary(cow.photos.faceProfile).catch(() => { }));
+            if (cow.photos.muzzle) deletePromises.push(deleteFromCloudinary(cow.photos.muzzle).catch(() => { }));
+            if (cow.photos.leftProfile) deletePromises.push(deleteFromCloudinary(cow.photos.leftProfile).catch(() => { }));
+            if (cow.photos.rightProfile) deletePromises.push(deleteFromCloudinary(cow.photos.rightProfile).catch(() => { }));
+            if (cow.photos.backView) deletePromises.push(deleteFromCloudinary(cow.photos.backView).catch(() => { }));
+            if (cow.photos.tailView) deletePromises.push(deleteFromCloudinary(cow.photos.tailView).catch(() => { }));
+            if (cow.photos.selfie) deletePromises.push(deleteFromCloudinary(cow.photos.selfie).catch(() => { }));
+            
+            if (deletePromises.length > 0) {
+                await Promise.all(deletePromises);
+            }
         }
 
         // Instruct Qdrant to directly delete vectors

@@ -822,14 +822,31 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
                 }
 
                 const cowId = response.data?.data?._id;
+                const initialStatus = response.data?.data?.aiMetadata?.status;
 
                 if (!cowId) throw new Error('Registration failed to return Cow ID');
+
+                if (initialStatus === 'SUCCESS') {
+                    updateProgress(100, 'Registration complete! Cow verified successfully.');
+
+                    localStorage.setItem('last_registration_time', Date.now().toString());
+                    if (offlineDraft && offlineDraft.id) {
+                        await syncManager.removePendingCow(offlineDraft.id);
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['cows'] });
+
+                    setTimeout(() => {
+                        stopProcessing();
+                        navigate('/home');
+                    }, 1500);
+                    return; // Skip polling entirely
+                }
 
                 updateProgress(60, 'AI Server received images. Running Biometric Extraction...');
 
                 // Start polling mechanism
                 let pollAttempts = 0;
-                const maxPolls = 60; // 60 polls at 5 seconds = 5 minutes timeout
+                const maxPolls = 96; // 96 polls at 5 seconds = 8 minutes timeout
 
                 const pollInterval = setInterval(async () => {
                     pollAttempts++;
@@ -892,6 +909,10 @@ export const AddCow: React.FC<AddCowProps> = ({ isAdmin = false }) => {
                             }
 
                             setFeedback({ type: 'ERROR', title: 'AI Verification Failed', message: errData.message || 'The AI detected an issue with your photos.' });
+                        } else if (pollErr.response?.status === 404) {
+                            clearInterval(pollInterval);
+                            stopProcessing();
+                            setFeedback({ type: 'ERROR', title: 'Registration Failed', message: 'AI Server is unreachable or the registration was rolled back. Please try again.' });
                         } else if (pollAttempts >= maxPolls) {
                             clearInterval(pollInterval);
                             stopProcessing();

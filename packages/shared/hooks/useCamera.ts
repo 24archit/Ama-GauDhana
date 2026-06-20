@@ -96,6 +96,8 @@ export const useCamera = () => {
 
         previewOptionsRef.current = null;
         activeRef.current = false;
+        // Release any pinned base64 string from state to free JS heap
+        setMedia(null);
         setCameraState(prev => ({ ...prev, isActive: false, isRecording: false, zoomLevel: 1 }));
     }, []);
 
@@ -114,7 +116,7 @@ export const useCamera = () => {
         if (!activeRef.current) return null;
 
         try {
-            const sample = await CameraPreview.captureSample({ quality: 85 });
+            const sample = await CameraPreview.captureSample({ quality: 70 });
             if (!sample?.value) return null;
 
             const base64Url = `data:image/webp;base64,${sample.value}`;
@@ -132,11 +134,12 @@ export const useCamera = () => {
         try {
             setCameraState(prev => ({ ...prev, isRecording: true }));
             const frameUrls: string[] = [];
+            const MAX_FRAMES = 8; // Hard cap — prevents excessive memory usage on low-end devices
             const intervalMs = Math.max(120, Math.round(1000 / samplesPerSecond));
             const startedAt = Date.now();
 
-            while (Date.now() - startedAt < durationMs) {
-                const sample = await CameraPreview.captureSample({ quality: 85 });
+            while (Date.now() - startedAt < durationMs && frameUrls.length < MAX_FRAMES) {
+                const sample = await CameraPreview.captureSample({ quality: 70 });
                 if (sample?.value) {
                     frameUrls.push(`data:image/webp;base64,${sample.value}`);
                 }
@@ -144,8 +147,8 @@ export const useCamera = () => {
             }
 
             setCameraState(prev => ({ ...prev, isRecording: false }));
-            const lastUrl = frameUrls[frameUrls.length - 1] ?? null;
-            setMedia(lastUrl);
+            // Don't retain a reference to frames in media state — the analysis loop manages
+            // frame lifecycle and will free them. Holding one here pins ~1MB in React state.
             return frameUrls;
         } catch (error) {
             console.error('Frame capture failed:', error);

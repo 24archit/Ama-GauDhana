@@ -11,6 +11,7 @@ import { processTelemetry } from '../../services/telemetryService';
 import { createCattleRegistration, cleanupCowCloudResources } from '../../services/cattleService';
 import { dlApiClient } from '../../utils/dlApiClient';
 import logger from '../../utils/logger';
+import { deleteCowVectors } from '../../utils/qdrantClient';
 
 interface AuthRequest extends Request {
     user?: { id: string; role: string; name: string };
@@ -182,8 +183,10 @@ export const searchCow = asyncHandler(async (req: Request, res: Response) => {
         const faceFile = files.faceImage[0];
         const muzzleFile = files.muzzleImage[0];
 
-        faceCloudinary = await uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry');
-        muzzleCloudinary = await uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry');
+        [faceCloudinary, muzzleCloudinary] = await Promise.all([
+            uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry'),
+            uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry')
+        ]);
 
         const dlResponse = await dlApiClient.post(`/search`, {
             user_id: authReq.user.id,
@@ -261,6 +264,16 @@ export async function processDlApiResult(payload: any) {
 
     if (!cow) {
         logger.info(`[Sync] Cow ${cow_id} already processed or not pending.`);
+        
+        // If the webhook is arriving late (after the 6-minute cleanup job or instant rollback),
+        // we must ensure the late vector is purged from Qdrant to prevent split-brain.
+        try {
+            await deleteCowVectors(cow_id);
+            logger.info(`[Sync] Purged late-arriving vector for deleted cow: ${cow_id}`);
+        } catch (qErr) {
+            // Error already logged in qdrantClient
+        }
+        
         return false;
     }
 

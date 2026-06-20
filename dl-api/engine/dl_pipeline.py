@@ -166,11 +166,9 @@ class DLPipeline:
         if self.use_gpu:
             try:
                 self.embedding_model = torch.compile(self.embedding_model, mode="max-autotune")
-                self.extractor = torch.compile(self.extractor, mode="max-autotune")
-                self.matcher = torch.compile(self.matcher, mode="max-autotune")
                 if self.spoof_model is not None:
                     self.spoof_model = torch.compile(self.spoof_model, mode="max-autotune")
-                print("torch.compile() applied to all PyTorch models (max-autotune mode).")
+                print("torch.compile() applied to fixed-shape PyTorch models (max-autotune mode).")
             except Exception as compile_err:
                 print(f"torch.compile() not available, continuing without it: {compile_err}")
 

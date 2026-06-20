@@ -10,6 +10,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Register the native TFLite ML plugin
+        registerPlugin(com.ocac.gonidhi.TFLiteDetectorPlugin.class);
         super.onCreate(savedInstanceState);
 
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));

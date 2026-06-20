@@ -204,17 +204,27 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
             const faceProfileFile = files.faceImage[0];
             const muzzleFile = files.muzzleImage[0];
 
-            faceProfileCloudinary = await safeUpload(faceProfileFile.buffer, 'gonidhi-images');
-            muzzleCloudinary = await safeUpload(muzzleFile.buffer, 'gonidhi-images');
-            leftProfileCloudinary = await safeUploadIfPresent(files.leftImage);
-            rightProfileCloudinary = await safeUploadIfPresent(files.rightImage);
-            backViewCloudinary = await safeUploadIfPresent(files.backImage);
-            tailViewCloudinary = await safeUploadIfPresent(files.tailImage);
-            selfieCloudinary = await safeUploadIfPresent(files.selfieImage);
-
-            // Upload isolated telemetry copies for the AI DL-API
-            faceTelemetryCloudinary = await safeUpload(faceProfileFile.buffer, 'gonidhi-telemetry');
-            muzzleTelemetryCloudinary = await safeUpload(muzzleFile.buffer, 'gonidhi-telemetry');
+            [
+                faceProfileCloudinary,
+                muzzleCloudinary,
+                leftProfileCloudinary,
+                rightProfileCloudinary,
+                backViewCloudinary,
+                tailViewCloudinary,
+                selfieCloudinary,
+                faceTelemetryCloudinary,
+                muzzleTelemetryCloudinary
+            ] = await Promise.all([
+                safeUpload(faceProfileFile.buffer, 'gonidhi-images'),
+                safeUpload(muzzleFile.buffer, 'gonidhi-images'),
+                safeUploadIfPresent(files.leftImage),
+                safeUploadIfPresent(files.rightImage),
+                safeUploadIfPresent(files.backImage),
+                safeUploadIfPresent(files.tailImage),
+                safeUploadIfPresent(files.selfieImage),
+                safeUpload(faceProfileFile.buffer, 'gonidhi-telemetry'),
+                safeUpload(muzzleFile.buffer, 'gonidhi-telemetry')
+            ]);
 
             const newCow = new Cattle({
                 farmerId: farmer._id,
@@ -293,8 +303,8 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
                     await session.endSession();
                 }
             }
-            for (const fileUrl of uploadedFiles) {
-                await deleteFromCloudinary(fileUrl).catch(() => { });
+            if (uploadedFiles.length > 0) {
+                await Promise.all(uploadedFiles.map(fileUrl => deleteFromCloudinary(fileUrl).catch(() => { })));
             }
 
             res.status(500).json({ success: false, message: error.message || 'Could not complete registration. Rolled back successfully.' });
@@ -397,9 +407,10 @@ export const proxySearchCow = async (req: Request, res: Response) => {
             const faceFile = files.faceImage[0];
             const muzzleFile = files.muzzleImage[0];
 
-            // Search images are uploaded DIRECTLY to telemetry to prevent root pollution
-            faceCloudinary = await uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry');
-            muzzleCloudinary = await uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry');
+            [faceCloudinary, muzzleCloudinary] = await Promise.all([
+                uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry'),
+                uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry')
+            ]);
 
             const dlResponse = await dlApiClient.post(`/search`, {
                 user_id: 'admin_proxy',
@@ -448,9 +459,8 @@ export const proxySearchCow = async (req: Request, res: Response) => {
             });
 
         } catch (dlError: any) {
-            // Rollback telemetry images if DL API fails or client aborts
-            if (faceCloudinary) await deleteFromCloudinary(faceCloudinary).catch(() => { });
-            if (muzzleCloudinary) await deleteFromCloudinary(muzzleCloudinary).catch(() => { });
+            if (faceCloudinary) deleteFromCloudinary(faceCloudinary).catch(() => { });
+            if (muzzleCloudinary) deleteFromCloudinary(muzzleCloudinary).catch(() => { });
 
             if (axios.isCancel(dlError) || dlError.name === 'AbortError' || dlError.name === 'CanceledError') {
                 logger.info('Client disconnected, canceled DL API search request.');

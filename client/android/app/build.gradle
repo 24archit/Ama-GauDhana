@@ -13,13 +13,25 @@ android {
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!muzzle'
+            noCompress 'tflite'
         }
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // Physically delete the 45MB TFJS muzzle model from the Android build assets
+    // so it doesn't inflate the APK size, since Android uses the native TFLite model instead.
+    applicationVariants.all { variant ->
+        variant.mergeAssetsProvider.configure {
+            doLast {
+                def assetsDir = it.outputDir.get().asFile
+                delete(new File(assetsDir, "public/model/muzzle"))
+            }
         }
     }
 }
@@ -40,6 +52,9 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+
+    // TFLite dependencies for the native Capacitor ML plugin
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
 }
 
 apply from: 'capacitor.build.gradle'

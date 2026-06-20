@@ -105,8 +105,10 @@ export const computeNIMAScore = (predictions: Float32Array | Int32Array | Uint8A
     return meanScore;
 };
 
-export const parseModelOutput = async (tensor: tf.Tensor): Promise<DetectionResult> => {
-    const data = await tensor.data();
+export const parseModelOutput = (tensor: tf.Tensor): DetectionResult => {
+    // Use dataSync() instead of await data() — avoids promise/microtask scheduling overhead
+    // that keeps the GPU stalled longer on mobile. We read immediately and free VRAM faster.
+    const data = tensor.dataSync();
     const shape = tensor.shape; 
 
     let numClasses = 1;

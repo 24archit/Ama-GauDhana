@@ -34,6 +34,7 @@ export interface ICattle extends Document {
         backView: string;
         tailView: string;
         selfie?: string;
+        imageHash?: string;
     };
     aiMetadata: {
         isRegistered: boolean;
@@ -85,7 +86,8 @@ const CattleSchema = new Schema<ICattle>({
         rightProfile: { type: String },
         backView: { type: String },
         tailView: { type: String },
-        selfie: { type: String }
+        selfie: { type: String },
+        imageHash: { type: String }
     },
 
     aiMetadata: {
@@ -115,6 +117,9 @@ const CattleSchema = new Schema<ICattle>({
 
 // Compound index for quick farmer searches
 CattleSchema.index({ farmerId: 1, tagNumber: 1 });
+
+// Index for idempotent retry checks based on image content
+CattleSchema.index({ farmerId: 1, 'photos.imageHash': 1 });
 
 // Text index for optimized searching (replaces slow $regex)
 CattleSchema.index({ name: 'text', tagNumber: 'text' });

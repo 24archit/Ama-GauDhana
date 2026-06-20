@@ -11,7 +11,7 @@ import cron from 'node-cron';
 let cleanupRunning = false;
 
 export const startCleanupJob = () => {
-    logger.info('[Jobs] Initializing Database & Vector Store Reconciliation Cron Job (Runs every hour)');
+    logger.info('[Jobs] Initializing Database & Vector Store Reconciliation Cron Job (Runs every 5 minutes)');
 
     const runCleanup = async () => {
         if (cleanupRunning) {
@@ -21,10 +21,10 @@ export const startCleanupJob = () => {
         cleanupRunning = true;
         try {
             logger.info('[CleanupJob] Phase 1: Sweeping stale PENDING / PROCESSING_RESULT cows in MongoDB...');
-            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+            const nineMinutesAgo = new Date(Date.now() - 9 * 60 * 1000);
             const orphanedCows = await Cattle.find({
                 'aiMetadata.status': { $in: ['PENDING', 'PROCESSING_RESULT'] },
-                createdAt: { $lt: twoHoursAgo }
+                createdAt: { $lt: nineMinutesAgo }
             });
 
             if (orphanedCows.length > 0) {
@@ -105,6 +105,6 @@ export const startCleanupJob = () => {
         }
     };
 
-    // Run the cleanup cron job at minute 0 past every hour
-    cron.schedule('0 * * * *', runCleanup);
+    // Run the cleanup cron job every 5 minutes
+    cron.schedule('*/5 * * * *', runCleanup);
 };
