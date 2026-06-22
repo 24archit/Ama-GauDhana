@@ -116,8 +116,9 @@ class UnifiedCLIPAnalyzer:
         self.qa_gate_schema: dict[str, dict] = {
             "liveness": {
                 "pass": [
-                    "a real cow being photographed outdoors in a field or farm",
-                    "a live cow standing on grass or dirt in natural outdoor light",
+                    "a photograph of a real, living cow",
+                    "a real cow being photographed in a natural environment",
+                    "a genuine high-quality photo of a cow",
                 ],
                 "fail": [
                     "a photo of a monitor, screen, or digital display showing a cow",
