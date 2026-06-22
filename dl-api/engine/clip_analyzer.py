@@ -74,8 +74,9 @@ class UnifiedCLIPAnalyzer:
 
     # Liveness gate: only reject if the non-live prompt wins AND its
     # confidence >= this threshold. Keeps borderline real photos safe.
-    LIVENESS_REJECT_THRESHOLD = 0.80
-    ALIGNMENT_REJECT_THRESHOLD = 0.70  # Only reject if HIGHLY confident it is rotated/upside down
+    LIVENESS_REJECT_THRESHOLD = 0.80       # Liveness is most critical — keep high
+    ALIGNMENT_REJECT_THRESHOLD = 0.75      # Only reject if strongly confident it is rotated/upside down
+    CONTAMINATION_REJECT_THRESHOLD = 0.75  # Only reject if clearly dirty — avoids natural moist-muzzle false positives
 
     def __init__(self, device: str) -> None:
         self.device = device
@@ -114,15 +115,15 @@ class UnifiedCLIPAnalyzer:
             # ── QA Gates ──────────────────────────────────────────────────────
             "liveness": [
                 # 0 → PASS
-                "a real live animal being photographed directly",
-                "a photo of a monitor, screen, or digital display showing an image",
-                "a photo of a printed paper, poster, or photograph of an animal",
+                "a real cow being photographed outdoors in a field or farm",
+                "a photo of a monitor, screen, or digital display showing a cow",
+                "a photo of a printed poster, photograph, or paper image of a cow",
             ],
             "contamination": [
-                # 0 → PASS
-                "a clean and dry cow muzzle",
-                "a cow muzzle covered in wet foam, drool, or saliva",
-                "a cow muzzle with grass, dirt, or food particles stuck to it",
+                # 0 → PASS: naturally moist or clean muzzle is fine
+                "a close-up of a cow muzzle that is clean, with just natural moisture on it",
+                "a cow muzzle heavily covered in white foam, drool, saliva, or bubbles",
+                "a cow muzzle with visible mud, dirt, dung, or green grass clumped on it",
             ],
             "alignment": [
                 # 0 → PASS: frontal or close-up front shot, both sides of face visible, muzzle centred
@@ -278,9 +279,10 @@ class UnifiedCLIPAnalyzer:
             return {"status": "REJECT", "reason": "REJ_QA_NOT_LIVE_IMAGE"}
 
         if image_type == "muzzle":
-            # Contamination (only matters on close-up muzzle photo)
+            # Contamination (soft threshold — avoids natural moist-muzzle false positives)
             probs = self._softmax_slice(raw_logits, "contamination")
-            if int(np.argmax(probs)) != 0:
+            winner = int(np.argmax(probs))
+            if winner != 0 and float(probs[winner]) >= self.CONTAMINATION_REJECT_THRESHOLD:
                 return {"status": "REJECT", "reason": "REJ_QA_CONTAMINATED_MUZZLE"}
 
         if image_type == "face":
