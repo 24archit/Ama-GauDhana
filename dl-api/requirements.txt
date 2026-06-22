@@ -20,3 +20,4 @@ transformers>=4.30.0
 tensorflow==2.12
 slowapi>=0.1.9
 cloudinary>=1.39.0
+python-multipart>=0.0.9
