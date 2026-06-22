@@ -8,11 +8,17 @@ from qdrant_client.http.models import (
     ScalarQuantization, ScalarQuantizationConfig, ScalarType
 )
 from collections import defaultdict
+import concurrent.futures
 
 COHORT_PER_SPACE = 200
 HNSW_EF = 256
 RRF_K = 30
-TOP_K_CANDIDATES = 25
+TOP_K_CANDIDATES = 30  # Increased from 25 to give semantic boost room to reorder
+
+# Boost added to the fused score per matching semantic tag (color / pattern / horns).
+# Three tags max → maximum boost = 3 × 0.04 = 0.12 on top of the [0, ~1] fused score.
+# Soft enough to never override a genuinely higher-similarity candidate.
+SEMANTIC_TAG_WEIGHT = 0.04
 
 class CattleVectorStore:
     def __init__(self, qdrant_url: str, qdrant_api_key: str, vector_size: int = 1536):
@@ -52,6 +58,14 @@ class CattleVectorStore:
                     field_name=field,
                     field_schema="keyword",
                 )
+
+            # Semantic tag indexes — enable fast payload filtering / lookup
+            for field in ("semantic_color", "semantic_pattern", "semantic_horns"):
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field,
+                    field_schema="keyword",
+                )
         except Exception as e:
             print(f"Warning during collection init: {e}")
 
@@ -66,6 +80,7 @@ class CattleVectorStore:
         crop_url: str = None,
         muzzle_crop_b64: str = None,
         superpoint_cache: dict = None,
+        semantic_tags: Optional[Dict[str, str]] = None,
     ):
         vector_dict = {k: v for k, v in embeddings.items() if v is not None}
         vector_id = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{cow_id}_{source}"))
@@ -83,6 +98,9 @@ class CattleVectorStore:
             payload["muzzle_crop_b64"] = muzzle_crop_b64
         if superpoint_cache:
             payload["superpoint_cache"] = superpoint_cache
+        if semantic_tags:
+            # Flat-merge: {"semantic_color": "black", "semantic_pattern": "solid_face", ...}
+            payload.update(semantic_tags)
 
         try:
             self._upsert(vector_id, vector_dict, payload)
@@ -111,6 +129,7 @@ class CattleVectorStore:
         top_k:     int = TOP_K_CANDIDATES,
         cohort_limit: int = COHORT_PER_SPACE,
         fetch_vectors: bool = False,
+        semantic_filter: Optional[Dict[str, str]] = None,
     ) -> Any:
         """
         Returns top-k candidate cows for downstream XGBoost/Dempster-Shafer processing.
@@ -124,6 +143,9 @@ class CattleVectorStore:
              not just cows that score very high in one space only.
           4. Final fused = 0.6*RRF_norm + 0.4*tanh(Z_norm) — rank stability +
              magnitude of similarity.
+          5. Semantic soft-boost: +SEMANTIC_TAG_WEIGHT per matching CLIP tag
+             (color, pattern, horns). Never overrides a genuinely better match;
+             gently promotes phenotype-compatible candidates.
         """
         base_filter = None
         if role == "farmer" and user_id:
@@ -177,51 +199,62 @@ class CattleVectorStore:
 
         spaces_searched = 0
 
-        for spec in search_specs:
-            raw_hits = self._query_one_space(
-                spec["vec_name"], spec["vec_data"],
-                spec["filter_part"], base_filter, cohort_limit,
-                fetch_vectors=fetch_vectors,
-            )
-            if not raw_hits:
-                continue
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(search_specs)) as executor:
+            future_to_spec = {
+                executor.submit(
+                    self._query_one_space,
+                    spec["vec_name"], spec["vec_data"],
+                    spec["filter_part"], base_filter, cohort_limit, fetch_vectors
+                ): spec for spec in search_specs
+            }
 
-            spaces_searched += 1
-            weight = spec["weight"]
-
-            scores = np.array([h.score for h in raw_hits], dtype=np.float32)
-            mean_s = float(np.mean(scores))
-            std_s  = float(np.std(scores))
-            if std_s < 1e-6:
-                std_s = 1e-6
-
-            for rank, hit in enumerate(raw_hits, start=1):
-                cow_id = hit.payload.get("cow_id")
-                if not cow_id:
+            for future in concurrent.futures.as_completed(future_to_spec):
+                spec = future_to_spec[future]
+                try:
+                    raw_hits = future.result()
+                except Exception as e:
+                    print(f"Qdrant fetch error for {spec['vec_name']}: {e}")
                     continue
 
-                z = (hit.score - mean_s) / std_s
-                cow_znorm_score[cow_id] += z * weight
+                if not raw_hits:
+                    continue
 
-                cow_rrf_score[cow_id] += weight / (RRF_K + rank)
+                spaces_searched += 1
+                weight = spec["weight"]
 
-                cow_space_count[cow_id] += 1
+                scores = np.array([h.score for h in raw_hits], dtype=np.float32)
+                mean_s = float(np.mean(scores))
+                std_s  = float(np.std(scores))
+                if std_s < 1e-6:
+                    std_s = 1e-6
 
-                part = hit.payload.get("part", "")
-                is_muzzle_part = part in ("muzzle", "face_muzzle")
-                prev_best = cow_data.get(cow_id)
+                for rank, hit in enumerate(raw_hits, start=1):
+                    cow_id = hit.payload.get("cow_id")
+                    if not cow_id:
+                        continue
 
-                if prev_best is None:
-                    cow_data[cow_id] = hit
-                    cow_best_score[cow_id] = hit.score
-                else:
-                    prev_part = prev_best.payload.get("part", "")
-                    prev_is_muzzle = prev_part in ("muzzle", "face_muzzle")
+                    z = (hit.score - mean_s) / std_s
+                    cow_znorm_score[cow_id] += z * weight
 
-                    if (is_muzzle_part and not prev_is_muzzle) or \
-                       (is_muzzle_part == prev_is_muzzle and hit.score > cow_best_score[cow_id]):
+                    cow_rrf_score[cow_id] += weight / (RRF_K + rank)
+
+                    cow_space_count[cow_id] += 1
+
+                    part = hit.payload.get("part", "")
+                    is_muzzle_part = part in ("muzzle", "face_muzzle")
+                    prev_best = cow_data.get(cow_id)
+
+                    if prev_best is None:
                         cow_data[cow_id] = hit
                         cow_best_score[cow_id] = hit.score
+                    else:
+                        prev_part = prev_best.payload.get("part", "")
+                        prev_is_muzzle = prev_part in ("muzzle", "face_muzzle")
+
+                        if (is_muzzle_part and not prev_is_muzzle) or \
+                           (is_muzzle_part == prev_is_muzzle and hit.score > cow_best_score[cow_id]):
+                            cow_data[cow_id] = hit
+                            cow_best_score[cow_id] = hit.score
 
         if not cow_rrf_score:
             return [] if top_k > 1 else {"found": False, "message": "No matches found."}
@@ -237,6 +270,20 @@ class CattleVectorStore:
             rrf_norm  = cow_rrf_score[cow_id] / max_rrf_possible
             znorm_val = cow_znorm_score.get(cow_id, 0.0)
             fused[cow_id] = 0.60 * rrf_norm + 0.40 * float(np.tanh(znorm_val / znorm_divisor))
+
+        # ── Semantic soft-boost ──────────────────────────────────────────────
+        # Add SEMANTIC_TAG_WEIGHT per matching CLIP tag from the query animal.
+        # Max boost = 3 tags × 0.04 = 0.12, never overrides a clearly better match.
+        if semantic_filter:
+            for cow_id in fused:
+                if cow_id in cow_data:
+                    hit_payload = cow_data[cow_id].payload
+                    tag_matches = sum(
+                        1 for k, v in semantic_filter.items()
+                        if hit_payload.get(k) == v
+                    )
+                    if tag_matches:
+                        fused[cow_id] += tag_matches * SEMANTIC_TAG_WEIGHT
 
         sorted_cows = sorted(fused.items(), key=lambda x: x[1], reverse=True)
         top_cow_ids = [cid for cid, _ in sorted_cows[:top_k] if cid in cow_data]
@@ -258,6 +305,10 @@ class CattleVectorStore:
                 "rrf_score":        float(cow_rrf_score[cid]),
                 "fused_score":      float(fused[cid]),
                 "spaces_matched":   cow_space_count[cid],
+                # Semantic tags stored at registration time (empty for legacy points)
+                "semantic_color":   hit.payload.get("semantic_color"),
+                "semantic_pattern": hit.payload.get("semantic_pattern"),
+                "semantic_horns":   hit.payload.get("semantic_horns"),
             }
             if fetch_vectors:
                 entry["vectors"] = hit.vector

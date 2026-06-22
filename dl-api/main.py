@@ -13,6 +13,7 @@ from core.config import (
     QDRANT_URL, QDRANT_API_KEY
 )
 from core import globals as glb
+from core.logging_config import logger
 
 # Services and Routers
 from engine.dl_pipeline import DLPipeline
@@ -21,17 +22,22 @@ from api.router import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading models and initializing AI Engine...", flush=True)
+    logger.info("Loading models and initializing AI Engine...")
     base_dir = os.path.dirname(__file__)
+
+    # Initialize asyncio primitives for concurrency control
+    glb.gpu_semaphore = asyncio.Semaphore(3)
+    glb.db_registration_lock = asyncio.Lock()
+    glb.in_flight_registrations = set()
 
     # Load XGBoost Ensembler
     glb.xgb_model = xgb.XGBClassifier()
     xgb_path = os.path.join(base_dir, "models", "xgb_biometric_model.json")
     if os.path.exists(xgb_path):
         glb.xgb_model.load_model(xgb_path)
-        print(f"XGBoost Ensembler Loaded from {xgb_path}", flush=True)
+        logger.info(f"XGBoost Ensembler Loaded from {xgb_path}")
     else:
-        print("WARNING: XGBoost model not found!", flush=True)
+        logger.warning("WARNING: XGBoost model not found!")
 
     # Load Deep Learning Pipeline
     glb.dl = DLPipeline(
@@ -42,18 +48,18 @@ async def lifespan(app: FastAPI):
     )
     
     # Initialize Vector DB Connection
-    print(f"Connecting to Qdrant at {QDRANT_URL}...", flush=True)
+    logger.info(f"Connecting to Qdrant at {QDRANT_URL}...")
     glb.db = CattleVectorStore(
         qdrant_url=QDRANT_URL,
         qdrant_api_key=QDRANT_API_KEY,
         vector_size=EMBEDDING_VECTOR_SIZE
     )
     
-    print("System Ready.", flush=True)
+    logger.info("System Ready.")
     
     yield  # Yield control to FastAPI app
     
-    print("Shutting down...", flush=True)
+    logger.info("Shutting down...")
 
 # Initialize FastAPI
 app = FastAPI(lifespan=lifespan)

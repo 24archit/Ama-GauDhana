@@ -80,14 +80,15 @@ export const getAllCattle = async (req: Request, res: Response) => {
         const skip = (page - 1) * limit;
         const sortOptions: any = search ? { score: { $meta: "textScore" } } : { createdAt: -1 };
 
-        const cattle = await Cattle.find(query, search ? { score: { $meta: "textScore" } } : {})
-            .populate('farmerId', 'name contact.phone location')
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await Cattle.countDocuments(query);
+        const [cattle, total] = await Promise.all([
+            Cattle.find(query, search ? { score: { $meta: "textScore" } } : {})
+                .populate('farmerId', 'name contact.phone location')
+                .sort(sortOptions)
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Cattle.countDocuments(query)
+        ]);
 
         res.status(200).json({
             success: true,
@@ -113,14 +114,15 @@ export const getPendingCattle = async (req: Request, res: Response) => {
 
         const skip = (page - 1) * limit;
 
-        const cattle = await Cattle.find(query)
-            .populate('farmerId', 'name contact.phone location')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await Cattle.countDocuments(query);
+        const [cattle, total] = await Promise.all([
+            Cattle.find(query)
+                .populate('farmerId', 'name contact.phone location')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Cattle.countDocuments(query)
+        ]);
 
         res.status(200).json({
             success: true,
@@ -275,12 +277,18 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
                 await session.endSession();
             }
 
-            await dlApiClient.post(`/register`, {
-                cow_id: savedCow._id.toString(),
-                farmer_id: farmer._id.toString(),
-                cow_name: name,
-                face_image_url: faceTelemetryCloudinary,
-                muzzle_image_url: muzzleTelemetryCloudinary
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('cow_id', savedCow._id.toString());
+            formData.append('farmer_id', farmer._id.toString());
+            if (name) formData.append('cow_name', name);
+            if (faceTelemetryCloudinary) formData.append('face_image_url', faceTelemetryCloudinary);
+            if (muzzleTelemetryCloudinary) formData.append('muzzle_image_url', muzzleTelemetryCloudinary);
+            formData.append('face_image', faceProfileFile.buffer, { filename: 'face.jpg' });
+            formData.append('muzzle_image', muzzleFile.buffer, { filename: 'muzzle.jpg' });
+
+            await dlApiClient.post(`/register`, formData, {
+                headers: formData.getHeaders()
             });
 
             res.status(202).json({
@@ -296,8 +304,10 @@ export const proxyRegisterCow = async (req: Request, res: Response) => {
                 const session = await mongoose.startSession();
                 try {
                     await session.withTransaction(async () => {
-                        await Cattle.findByIdAndDelete(savedCow._id, { session });
-                        await User.findByIdAndUpdate(farmer._id, { $pull: { cows: savedCow._id } }, { session });
+                        await Promise.all([
+                            Cattle.findByIdAndDelete(savedCow._id, { session }),
+                            User.findByIdAndUpdate(farmer._id, { $pull: { cows: savedCow._id } }, { session })
+                        ]);
                     });
                 } finally {
                     await session.endSession();
@@ -407,17 +417,21 @@ export const proxySearchCow = async (req: Request, res: Response) => {
             const faceFile = files.faceImage[0];
             const muzzleFile = files.muzzleImage[0];
 
-            [faceCloudinary, muzzleCloudinary] = await Promise.all([
-                uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry'),
-                uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry')
-            ]);
+            // Fire and forget cloudinary uploads to reduce latency
+            uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry').then((url) => faceCloudinary = url).catch(() => {});
+            uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry').then((url) => muzzleCloudinary = url).catch(() => {});
 
-            const dlResponse = await dlApiClient.post(`/search`, {
-                user_id: 'admin_proxy',
-                role: 'admin',
-                face_image_url: faceCloudinary,
-                muzzle_image_url: muzzleCloudinary
-            }, {
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('user_id', 'admin_proxy');
+            formData.append('role', 'admin');
+            if (faceCloudinary) formData.append('face_image_url', faceCloudinary);
+            if (muzzleCloudinary) formData.append('muzzle_image_url', muzzleCloudinary);
+            formData.append('face_image', faceFile.buffer, { filename: 'face.jpg' });
+            formData.append('muzzle_image', muzzleFile.buffer, { filename: 'muzzle.jpg' });
+
+            const dlResponse = await dlApiClient.post(`/search`, formData, {
+                headers: formData.getHeaders(),
                 signal: abortController.signal,
                 timeout: 120000 // 120 seconds timeout
             });

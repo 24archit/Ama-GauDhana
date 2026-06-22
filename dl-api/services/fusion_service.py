@@ -56,13 +56,11 @@ def compute_dempster_shafer_fusion(muzzle_sim: float, face_sim: float, lg_matche
     b_fusion = combine_ds(b_muzzle, b_face)
     b_fusion = combine_ds(b_fusion, b_lg)
 
-    print(f"\n--- DS Fusion Debug ---")
-    print(f"Muzzle Beliefs: Match={b_muzzle[0]:.3f}, Mismatch={b_muzzle[1]:.3f}, Uncert={b_muzzle[2]:.3f}")
-    print(f"Face Beliefs: Match={b_face[0]:.3f}, Mismatch={b_face[1]:.3f}, Uncert={b_face[2]:.3f}")
-    print(f"LightGlue Beliefs: Match={b_lg[0]:.3f}, Mismatch={b_lg[1]:.3f}, Uncert={b_lg[2]:.3f}")
-    print(f"Final Fusion: Match={b_fusion[0]:.3f}, Mismatch={b_fusion[1]:.3f}, Uncert={b_fusion[2]:.3f}")
-    print("Hi")
-    print(f"-----------------------\n")
+    from core.logging_config import logger
+    logger.debug(f"DS Fusion: Muzzle=(M:{b_muzzle[0]:.3f}, MM:{b_muzzle[1]:.3f}, U:{b_muzzle[2]:.3f}) "
+                 f"Face=(M:{b_face[0]:.3f}, MM:{b_face[1]:.3f}, U:{b_face[2]:.3f}) "
+                 f"LG=(M:{b_lg[0]:.3f}, MM:{b_lg[1]:.3f}, U:{b_lg[2]:.3f}) "
+                 f"Final=(M:{b_fusion[0]:.3f}, MM:{b_fusion[1]:.3f}, U:{b_fusion[2]:.3f})")
 
     return {
         "belief_match": b_fusion[0],

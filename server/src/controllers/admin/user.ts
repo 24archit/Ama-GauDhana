@@ -24,13 +24,14 @@ export const getFarmers = async (req: Request, res: Response) => {
 
         const skip = (page - 1) * limit;
 
-        const farmers = await User.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await User.countDocuments(query);
+        const [farmers, total] = await Promise.all([
+            User.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            User.countDocuments(query)
+        ]);
 
         res.status(200).json({
             success: true,
@@ -84,13 +85,14 @@ export const getFarmerCattle = async (req: Request, res: Response) => {
         if (!mongoose.Types.ObjectId.isValid(req.params.id as string)) {
             return res.status(404).json({ success: false, message: 'Farmer not found' });
         }
-        const cattle = await Cattle.find({ farmerId: req.params.id })
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await Cattle.countDocuments({ farmerId: req.params.id });
+        const [cattle, total] = await Promise.all([
+            Cattle.find({ farmerId: req.params.id })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Cattle.countDocuments({ farmerId: req.params.id })
+        ]);
 
         res.status(200).json({
             success: true,

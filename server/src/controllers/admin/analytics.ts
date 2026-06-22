@@ -9,10 +9,12 @@ import logger from '../../utils/logger';
 
 export const getSystemStats = async (req: Request, res: Response) => {
     try {
-        const totalFarmers = await User.countDocuments({ role: 'farmer' });
-        const totalCattle = await Cattle.countDocuments();
-        const totalDisputes = await Dispute.countDocuments();
-        const activeDisputes = await Dispute.countDocuments({ status: 'pending' });
+        const [totalFarmers, totalCattle, totalDisputes, activeDisputes] = await Promise.all([
+            User.countDocuments({ role: 'farmer' }),
+            Cattle.countDocuments(),
+            Dispute.countDocuments(),
+            Dispute.countDocuments({ status: 'pending' })
+        ]);
 
         res.status(200).json({
             success: true,
@@ -73,26 +75,21 @@ export const getAiLogs = async (req: Request, res: Response) => {
             };
         }
 
-        const logs = await AiLog.find(query)
-            .sort({ timestamp: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await AiLog.countDocuments(query);
-
-        // Calculate deep AI metrics
-        const breakdown = await AiLog.aggregate([
-            { $match: query },
-            {
-                $group: {
-                    _id: { $ifNull: ['$matchStatus', 'UNKNOWN'] },
-                    total: { $sum: 1 },
-                    correct: { $sum: { $cond: [{ $eq: ['$isAiOutcomeCorrect', true] }, 1, 0] } },
-                    incorrect: { $sum: { $cond: [{ $eq: ['$isAiOutcomeCorrect', false] }, 1, 0] } },
-                    avgTime: { $avg: '$inferenceTimeMs' }
+        const [logs, total, breakdown] = await Promise.all([
+            AiLog.find(query).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),
+            AiLog.countDocuments(query),
+            AiLog.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: { $ifNull: ['$matchStatus', 'UNKNOWN'] },
+                        total: { $sum: 1 },
+                        correct: { $sum: { $cond: [{ $eq: ['$isAiOutcomeCorrect', true] }, 1, 0] } },
+                        incorrect: { $sum: { $cond: [{ $eq: ['$isAiOutcomeCorrect', false] }, 1, 0] } },
+                        avgTime: { $avg: '$inferenceTimeMs' }
+                    }
                 }
-            }
+            ])
         ]);
 
         let totalInferences = 0;

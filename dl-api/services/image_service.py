@@ -41,6 +41,17 @@ def extract_crop_from_b64(crop_b64: str) -> np.ndarray:
         print(f"Error decoding b64 crop: {e}")
         return None
 
+def extract_crop_from_bytes(image_bytes: bytes) -> np.ndarray:
+    if not image_bytes:
+        return None
+    try:
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        return img
+    except Exception as e:
+        print(f"Error decoding image bytes: {e}")
+        return None
+
 def upload_crop_to_cloudinary(crop: np.ndarray, folder: str = "gonidhi-telemetry", quality: int = 70) -> str:
     """Compresses the crop as a low-quality JPEG and uploads it to Cloudinary asynchronously."""
     if crop is None or crop.size == 0:

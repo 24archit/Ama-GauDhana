@@ -17,10 +17,6 @@ class MegaDescriptorModel(nn.Module):
         )
         self.embedding_dim = int(getattr(self.encoder, "num_features", 1536))
 
-    def _load_checkpoint(self, checkpoint_path: str) -> None:
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
-        self.encoder.load_state_dict(state_dict)
-
     def forward_once(self, x: torch.Tensor) -> torch.Tensor:
         raw_embedding = self.encoder(x)
         return F.normalize(raw_embedding, p=2, dim=1)

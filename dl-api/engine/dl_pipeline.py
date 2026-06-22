@@ -13,6 +13,7 @@ from .spoof_model import MuzzleSpoofDetector
 from lightglue import LightGlue, SuperPoint
 from skimage.metrics import structural_similarity as ssim
 from transformers import pipeline
+from .clip_analyzer import UnifiedCLIPAnalyzer
 import tensorflow as tf
 
 # Configure TensorFlow to allocate memory dynamically
@@ -157,7 +158,7 @@ class DLPipeline:
         self.spoof_model = None
         if spoof_path:
             self.spoof_model = MuzzleSpoofDetector().to(self.device)
-            self.spoof_model.load_state_dict(torch.load(spoof_path, map_location=self.device))
+            self.spoof_model.load_state_dict(torch.load(spoof_path, map_location=self.device, weights_only=True))
             self.spoof_model.eval()
             if self.use_gpu:
                 self.spoof_model.half()  # FP16 for spoof detection
@@ -200,12 +201,19 @@ class DLPipeline:
             print(f"Failed to load Spatial Attention models: {e}")
             self.headless_muzzle_model = None
             self.headless_face_model = None
-        
+
+        # CLIP Unified Analyzer — QA gateway + semantic tagger (single forward pass)
+        self.clip_analyzer = UnifiedCLIPAnalyzer(device=self.device)
+
         # CUDA Warmup — pre-allocate memory and compile lazy kernels so the first real request is fast
         if self.use_gpu:
             print("Running CUDA warmup pass...", flush=True)
             self._cuda_warmup()
-            print(f"GPU Optimization Summary: FP16 models, cuDNN benchmark, TF32 matmul, TF mixed_float16, torch.compile, CUDA warmup", flush=True)
+            print(
+                "GPU Optimization Summary: FP16 models, cuDNN benchmark, TF32 matmul, "
+                "TF mixed_float16, torch.compile, CUDA warmup, CLIP FP16+autocast",
+                flush=True,
+            )
         print(f"All models loaded on {self.device.upper()}.", flush=True)
 
     def _cuda_warmup(self):
@@ -238,7 +246,10 @@ class DLPipeline:
             # 5. HuggingFace ViT warmup
             dummy_pil = Image.fromarray(np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8))
             self.cow_classifier(dummy_pil)
-            
+
+            # 6. CLIP warmup (image encode + text-image similarity pass)
+            self.clip_analyzer.warmup()
+
             # Flush any leftover allocations
             torch.cuda.empty_cache()
             print("CUDA warmup complete — all models primed.")
@@ -309,6 +320,44 @@ class DLPipeline:
             print(f"Error checking if image is a cow: {e}")
             return False, 0.0, []
 
+    def are_images_cows(self, bgr_images: list[np.ndarray]) -> list[tuple[bool, float, list]]:
+        if not bgr_images or self.cow_classifier is None:
+            return [(False, 0.0, [])] * len(bgr_images)
+        try:
+            valid_images = []
+            valid_indices = []
+            for i, img in enumerate(bgr_images):
+                if img is not None:
+                    rgb_image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    valid_images.append(Image.fromarray(rgb_image))
+                    valid_indices.append(i)
+                    
+            if not valid_images:
+                return [(False, 0.0, [])] * len(bgr_images)
+                
+            predictions_list = self.cow_classifier(valid_images)
+            if len(valid_images) == 1:
+                predictions_list = [predictions_list]
+                
+            final_returns = [(False, 0.0, [])] * len(bgr_images)
+            cow_keywords = ['cow', 'ox', 'cattle', 'water buffalo', 'bison', 'bull']
+            MIN_CONFIDENCE = 0.20
+            
+            for res_idx, predictions in enumerate(predictions_list):
+                orig_idx = valid_indices[res_idx]
+                is_cow, cow_probability = False, 0.0
+                for pred in predictions:
+                    if any(keyword in pred['label'].lower() for keyword in cow_keywords):
+                        if pred['score'] >= MIN_CONFIDENCE:
+                            is_cow = True
+                            cow_probability = pred['score']
+                            break
+                final_returns[orig_idx] = (is_cow, cow_probability, predictions)
+            return final_returns
+        except Exception as e:
+            print(f"Error checking if images are cows: {e}")
+            return [(False, 0.0, [])] * len(bgr_images)
+
     def extract_biometric(self, image: np.ndarray, part_type: str = "muzzle", min_conf: float = 0.39):
         if image is None: return None, 0.0
         
@@ -328,7 +377,13 @@ class DLPipeline:
         x1, y1 = max(0, box[0]), max(0, box[1])
         x2, y2 = min(w, box[2]), min(h, box[3])
         
+        if x1 >= x2 or y1 >= y2:
+            return None, 0.0
+            
         crop = image[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None, 0.0
+            
         pure_raw = crop.copy()
         
         if part_type == "muzzle":
@@ -339,12 +394,58 @@ class DLPipeline:
         
         return {"raw": pure_raw, "clahe": crop_clahe, "leveled": crop}, conf
 
+    def extract_biometric_batch(self, images: list[np.ndarray], part_type: str = "muzzle", min_conf: float = 0.39):
+        if not images: return []
+        model = self.yolo_face if part_type == "face" else self.yolo_muzzle
+        
+        valid_images = []
+        valid_indices = []
+        for i, img in enumerate(images):
+            if img is not None:
+                valid_images.append(img)
+                valid_indices.append(i)
+                
+        if not valid_images:
+            return [(None, 0.0)] * len(images)
+            
+        results = model.predict(source=valid_images, imgsz=640, conf=min_conf, device=self.device, half=self.use_gpu, verbose=False)
+        
+        final_returns = [(None, 0.0)] * len(images)
+        for res_idx, r in enumerate(results):
+            orig_idx = valid_indices[res_idx]
+            image = valid_images[res_idx]
+            
+            if r.boxes is None or len(r.boxes.xyxy) == 0:
+                continue
+                
+            best_idx = torch.argmax(r.boxes.conf).item()
+            conf = float(r.boxes.conf[best_idx])
+            box = r.boxes.xyxy[best_idx].cpu().numpy().astype(int)
+            
+            h, w = image.shape[:2]
+            x1, y1 = max(0, box[0]), max(0, box[1])
+            x2, y2 = min(w, box[2]), min(h, box[3])
+            
+            if x1 >= x2 or y1 >= y2: continue
+            crop = image[y1:y2, x1:x2]
+            if crop.size == 0: continue
+            
+            pure_raw = crop.copy()
+            if part_type == "muzzle": crop = nostril_leveler(crop)
+            crop_clahe = apply_clahe(crop)
+            
+            final_returns[orig_idx] = ({"raw": pure_raw, "clahe": crop_clahe, "leveled": crop}, conf)
+            
+        return final_returns
+
     def get_embeddings_batch(self, cropped_images: list[np.ndarray]) -> list[list[float]]:
         if not cropped_images:
             return []
             
         tensors = []
         for img in cropped_images:
+            if img is None or img.size == 0:
+                continue
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_pil = Image.fromarray(img_rgb)
             tensors.append(self.transform(img_pil))
@@ -360,7 +461,7 @@ class DLPipeline:
         return embeddings.float().cpu().numpy().tolist()
         
     def is_spoof(self, image: np.ndarray) -> tuple[bool, float]:
-        if self.spoof_model is None or image is None:
+        if self.spoof_model is None or image is None or image.size == 0:
             return False, 0.0 # Assume live if no model available
             
         img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -377,6 +478,38 @@ class DLPipeline:
             print(f"Spoof probability: {spoof_prob}")
             
         return spoof_prob > 2.0, spoof_prob
+
+    def are_images_spoofs(self, bgr_images: list[np.ndarray]) -> list[tuple[bool, float]]:
+        if self.spoof_model is None or not bgr_images:
+            return [(False, 0.0)] * len(bgr_images)
+            
+        valid_tensors = []
+        valid_indices = []
+        for i, img in enumerate(bgr_images):
+            if img is not None and img.size > 0:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                tensor_img = self.spoof_transform(Image.fromarray(img_rgb))
+                valid_tensors.append(tensor_img)
+                valid_indices.append(i)
+                
+        if not valid_tensors:
+            return [(False, 0.0)] * len(bgr_images)
+            
+        batch_tensor = torch.stack(valid_tensors).to(self.device)
+        if self.use_gpu:
+            batch_tensor = batch_tensor.half()
+            
+        with torch.inference_mode():
+            output = self.spoof_model(batch_tensor)
+            probs = torch.nn.functional.softmax(output.float(), dim=1)
+            
+        final_returns = [(False, 0.0)] * len(bgr_images)
+        for res_idx, prob in enumerate(probs):
+            orig_idx = valid_indices[res_idx]
+            spoof_prob = prob[1].item()
+            final_returns[orig_idx] = (spoof_prob > 2.0, spoof_prob)
+            
+        return final_returns
             
     def _prepare_tensor_for_lightglue(self, img: np.ndarray) -> torch.Tensor:
         if img is None: return None

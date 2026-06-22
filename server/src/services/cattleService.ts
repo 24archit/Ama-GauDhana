@@ -207,12 +207,18 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
         // Send Job to DL-API REST Endpoint
         // We trigger it and let it run in the background thread. We do NOT await it 
         // to prevent stream aborted errors from rolling back the DB entry and images.
-        dlApiClient.post(`/register`, {
-            cow_id: savedCow._id.toString(),
-            farmer_id: farmerId,
-            cow_name: name,
-            face_image_url: faceTelemetryCloudinary,
-            muzzle_image_url: muzzleTelemetryCloudinary
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('cow_id', savedCow._id.toString());
+        formData.append('farmer_id', farmerId);
+        if (name) formData.append('cow_name', name);
+        if (faceTelemetryCloudinary) formData.append('face_image_url', faceTelemetryCloudinary);
+        if (muzzleTelemetryCloudinary) formData.append('muzzle_image_url', muzzleTelemetryCloudinary);
+        formData.append('face_image', faceProfileFile.buffer, { filename: 'face.jpg' });
+        formData.append('muzzle_image', muzzleFile.buffer, { filename: 'muzzle.jpg' });
+
+        dlApiClient.post(`/register`, formData, {
+            headers: formData.getHeaders()
         }).catch(async (apiError: any) => {
             logger.error(apiError.message || apiError, 'Error triggering DL-API in background. Rolling back ghost cow...');
             
@@ -247,8 +253,10 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
                 const session = await mongoose.startSession();
                 try {
                     await session.withTransaction(async () => {
-                        await Cattle.findByIdAndDelete(savedCow._id, { session });
-                        await User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } }, { session });
+                        await Promise.all([
+                            Cattle.findByIdAndDelete(savedCow._id, { session }),
+                            User.findByIdAndUpdate(farmerId, { $pull: { cows: savedCow._id } }, { session })
+                        ]);
                     });
                 } finally {
                     await session.endSession();
@@ -267,8 +275,9 @@ export const createCattleRegistration = async (req: any, farmerId: string, paylo
 
 export const cleanupCowCloudResources = async (cow: any) => {
     try {
+        const deletePromises: Promise<any>[] = [];
+        
         if (cow.photos) {
-            const deletePromises = [];
             if (cow.photos.faceProfile) deletePromises.push(deleteFromCloudinary(cow.photos.faceProfile).catch(() => { }));
             if (cow.photos.muzzle) deletePromises.push(deleteFromCloudinary(cow.photos.muzzle).catch(() => { }));
             if (cow.photos.leftProfile) deletePromises.push(deleteFromCloudinary(cow.photos.leftProfile).catch(() => { }));
@@ -276,19 +285,16 @@ export const cleanupCowCloudResources = async (cow: any) => {
             if (cow.photos.backView) deletePromises.push(deleteFromCloudinary(cow.photos.backView).catch(() => { }));
             if (cow.photos.tailView) deletePromises.push(deleteFromCloudinary(cow.photos.tailView).catch(() => { }));
             if (cow.photos.selfie) deletePromises.push(deleteFromCloudinary(cow.photos.selfie).catch(() => { }));
-            
-            if (deletePromises.length > 0) {
-                await Promise.all(deletePromises);
-            }
         }
 
         // Instruct Qdrant to directly delete vectors
-        try {
-            await deleteCowVectors(cow._id.toString());
-        } catch (dlErr) {
-            // Error already logged in qdrantClient
+        if (cow._id) {
+            deletePromises.push(deleteCowVectors(cow._id.toString()).catch(() => { }));
         }
 
+        if (deletePromises.length > 0) {
+            await Promise.all(deletePromises);
+        }
     } catch (err) {
         logger.error(err, 'Error in cleanupCowCloudResources:');
     }

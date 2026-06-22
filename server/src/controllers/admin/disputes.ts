@@ -18,16 +18,17 @@ export const getDisputes = async (req: Request, res: Response) => {
 
         const skip = (page - 1) * limit;
 
-        const disputes = await Dispute.find(query)
-            .populate('cattleId', 'tagNumber name species breed photos aiMetadata')
-            .populate('originalFarmerId', 'name contact.phone location')
-            .populate('attemptingFarmerId', 'name contact.phone location')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
-
-        const total = await Dispute.countDocuments(query);
+        const [disputes, total] = await Promise.all([
+            Dispute.find(query)
+                .populate('cattleId', 'tagNumber name species breed photos aiMetadata')
+                .populate('originalFarmerId', 'name contact.phone location')
+                .populate('attemptingFarmerId', 'name contact.phone location')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Dispute.countDocuments(query)
+        ]);
 
         res.status(200).json({
             success: true,
@@ -82,6 +83,9 @@ export const resolveDispute = async (req: Request, res: Response) => {
                         farmerId: assignedFarmerId,
                         isDispute: false
                     }, { session });
+                } else if (resolutionStatus === 'rejected' && updatedDispute.cattleId) {
+                    // If rejected, unfreeze the original cow
+                    await Cattle.findByIdAndUpdate(updatedDispute.cattleId, { isDispute: false }, { session });
                 }
             });
         } finally {

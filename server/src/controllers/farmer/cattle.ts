@@ -56,12 +56,6 @@ export const getMyCattle = asyncHandler(async (req: Request, res: Response) => {
         'aiMetadata.status': { $nin: ['PENDING', 'PROCESSING_RESULT'] }
     };
 
-    const [totalNonDisputed, totalPregnant, totalDisputed] = await Promise.all([
-        Cattle.countDocuments({ ...baseQuery, isDispute: { $ne: true } }),
-        Cattle.countDocuments({ ...baseQuery, isDispute: { $ne: true }, currentStatus: 'Pregnant' }),
-        Cattle.countDocuments({ ...baseQuery, isDispute: true })
-    ]);
-
     const searchQuery = { ...baseQuery };
     if (search) {
         searchQuery.$text = { $search: search };
@@ -71,13 +65,17 @@ export const getMyCattle = asyncHandler(async (req: Request, res: Response) => {
         ? { score: { $meta: "textScore" } }
         : { createdAt: -1 };
 
-    const cattle = await Cattle.find(searchQuery, search ? { score: { $meta: "textScore" } } : {})
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .lean();
-
-    const totalFiltered = await Cattle.countDocuments(searchQuery);
+    const [totalNonDisputed, totalPregnant, totalDisputed, cattle, totalFiltered] = await Promise.all([
+        Cattle.countDocuments({ ...baseQuery, isDispute: { $ne: true } }),
+        Cattle.countDocuments({ ...baseQuery, isDispute: { $ne: true }, currentStatus: 'Pregnant' }),
+        Cattle.countDocuments({ ...baseQuery, isDispute: true }),
+        Cattle.find(searchQuery, search ? { score: { $meta: "textScore" } } : {})
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+        Cattle.countDocuments(searchQuery)
+    ]);
 
     res.status(200).json({
         success: true,
@@ -183,17 +181,21 @@ export const searchCow = asyncHandler(async (req: Request, res: Response) => {
         const faceFile = files.faceImage[0];
         const muzzleFile = files.muzzleImage[0];
 
-        [faceCloudinary, muzzleCloudinary] = await Promise.all([
-            uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry'),
-            uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry')
-        ]);
+        // Fire and forget cloudinary uploads to reduce latency
+        uploadBufferToCloudinary(faceFile.buffer, 'gonidhi-telemetry').then((url) => faceCloudinary = url).catch(() => {});
+        uploadBufferToCloudinary(muzzleFile.buffer, 'gonidhi-telemetry').then((url) => muzzleCloudinary = url).catch(() => {});
 
-        const dlResponse = await dlApiClient.post(`/search`, {
-            user_id: authReq.user.id,
-            role: authReq.user.role || 'farmer',
-            face_image_url: faceCloudinary,
-            muzzle_image_url: muzzleCloudinary
-        }, {
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('user_id', authReq.user.id);
+        formData.append('role', authReq.user.role || 'farmer');
+        if (faceCloudinary) formData.append('face_image_url', faceCloudinary);
+        if (muzzleCloudinary) formData.append('muzzle_image_url', muzzleCloudinary);
+        formData.append('face_image', faceFile.buffer, { filename: 'face.jpg' });
+        formData.append('muzzle_image', muzzleFile.buffer, { filename: 'muzzle.jpg' });
+
+        const dlResponse = await dlApiClient.post(`/search`, formData, {
+            headers: formData.getHeaders(),
             signal: abortController.signal,
             timeout: 120000
         });
@@ -278,12 +280,23 @@ export async function processDlApiResult(payload: any) {
     }
 
     try {
-        if (status === 'DUPLICATE') {
+        let finalStatus = status;
+
+        if (status === 'DUPLICATE' && matched_cow_id) {
+            const matchedCow = await Cattle.findById(matched_cow_id).select('farmerId').lean();
+            if (matchedCow && matchedCow.farmerId.toString() !== farmer_id.toString()) {
+                finalStatus = 'DISPUTE';
+            }
+        }
+
+        if (finalStatus === 'DUPLICATE') {
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
-                    await Cattle.findByIdAndDelete(cow_id, { session });
-                    await User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } }, { session });
+                    await Promise.all([
+                        Cattle.findByIdAndDelete(cow_id, { session }),
+                        User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } }, { session })
+                    ]);
                 });
             } finally {
                 await session.endSession();
@@ -293,11 +306,7 @@ export async function processDlApiResult(payload: any) {
 
             cleanupCowCloudResources(cow);
             logger.info(`[Sync] Duplicate cow deleted for cow_id: ${cow_id}`);
-        } else if (status === 'DISPUTE') {
-            cow.isDispute = true;
-            cow.aiMetadata.isRegistered = true;
-            cow.aiMetadata.status = status;
-
+        } else if (finalStatus === 'DISPUTE') {
             let originalFarmerId = null;
             if (matched_cow_id) {
                 const matchedCow = await Cattle.findById(matched_cow_id);
@@ -309,26 +318,33 @@ export async function processDlApiResult(payload: any) {
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
-                    await cow.save({ session });
+                    const tasks: Promise<any>[] = [
+                        Cattle.findByIdAndDelete(cow_id, { session }),
+                        User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } }, { session })
+                    ];
+                    
                     if (matched_cow_id) {
-                        await Cattle.findByIdAndUpdate(matched_cow_id, { isDispute: true }, { session });
+                        tasks.push(Cattle.findByIdAndUpdate(matched_cow_id, { isDispute: true }, { session }));
                     }
-                    if (originalFarmerId) {
-                        await Dispute.create([{
-                            cattleId: cow_id,
+                    if (originalFarmerId && matched_cow_id) {
+                        tasks.push(Dispute.create([{
+                            cattleId: matched_cow_id,
                             originalFarmerId: originalFarmerId,
                             attemptingFarmerId: farmer_id,
                             status: 'pending',
                             reason: error_message || 'Duplicate Registration Attempt Detected via AI Biometrics'
-                        }], { session });
+                        }], { session }));
                     }
+                    
+                    await Promise.all(tasks);
                 });
             } finally {
                 await session.endSession();
             }
 
-            logger.info(`[Sync] Dispute marked for cow_id: ${cow_id} and matched_cow_id: ${matched_cow_id}`);
-        } else if (status === 'SUCCESS') {
+            cleanupCowCloudResources(cow);
+            logger.info(`[Sync] Dispute marked for matched_cow_id: ${matched_cow_id}. Ghost cow ${cow_id} deleted.`);
+        } else if (finalStatus === 'SUCCESS') {
             cow.aiMetadata.isRegistered = true;
             cow.aiMetadata.status = status;
             await cow.save();
@@ -337,13 +353,15 @@ export async function processDlApiResult(payload: any) {
             const session = await mongoose.startSession();
             try {
                 await session.withTransaction(async () => {
-                    await Cattle.findByIdAndDelete(cow_id, { session });
-                    await User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } }, { session });
+                    await Promise.all([
+                        Cattle.findByIdAndDelete(cow_id, { session }),
+                        User.findByIdAndUpdate(farmer_id, { $pull: { cows: cow_id } }, { session })
+                    ]);
                 });
             } finally {
                 await session.endSession();
             }
-            recentRejections.set(cow_id, { status, message: error_message } as any);
+            recentRejections.set(cow_id, { status: finalStatus, message: error_message } as any);
             setTimeout(() => recentRejections.delete(cow_id), REJECTION_TTL_MS);
 
             cleanupCowCloudResources(cow);

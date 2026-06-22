@@ -80,10 +80,22 @@ const corsOptionsDelegate = (req: any, callback: any) => {
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
-// Global payload limit set to 50mb to prevent DDoS memory exhaustion while allowing large AI telemetry. 
-// Biometric upload endpoints will override this locally if needed.
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Global payload limit set to 2mb to prevent DDoS memory exhaustion. 
+// Webhook endpoints override this to 50mb for large AI telemetry.
+app.use((req, res, next) => {
+  if (req.path.includes('/webhook/')) {
+    express.json({ limit: '50mb' })(req, res, next);
+  } else {
+    express.json({ limit: '2mb' })(req, res, next);
+  }
+});
+app.use((req, res, next) => {
+  if (req.path.includes('/webhook/')) {
+    express.urlencoded({ limit: '50mb', extended: true })(req, res, next);
+  } else {
+    express.urlencoded({ limit: '2mb', extended: true })(req, res, next);
+  }
+});
 app.use(noSqlSanitize); // Sanitize ALL incoming payloads before they hit routers
 app.use(cors(corsOptionsDelegate));
 
