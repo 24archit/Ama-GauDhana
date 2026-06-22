@@ -125,12 +125,12 @@ class UnifiedCLIPAnalyzer:
                 "a cow muzzle with grass, dirt, or food particles stuck to it",
             ],
             "alignment": [
-                # 0 → PASS: both eyes visible and symmetrical, nose centred, frontal shot
-                "a cow face looking straight at the camera with both eyes and nose visible and centred",
+                # 0 → PASS: frontal or close-up front shot, both sides of face visible, muzzle centred
+                "a cow face photographed from the front with the muzzle at the bottom and both sides of the face symmetrically visible",
                 # FAIL: upside down
                 "an upside-down photo of a cow with the nose pointing upward and hooves at the top",
-                # FAIL: side profile, only one eye visible
-                "a side profile of a cow showing only one eye and the ear on the same side",
+                # FAIL: side profile, cow head turned sideways
+                "a cow photographed from the side with its head turned away showing only one ear and one eye",
             ],
             # ── Semantic Tags ──────────────────────────────────────────────────
             "color": [
