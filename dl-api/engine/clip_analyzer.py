@@ -19,7 +19,7 @@ GPU optimizations
 * FP16 image encoding on CUDA; FP32 text vectors (numerically stable).
 * torch.amp.autocast('cuda') wrapping image encode.
 * torch.inference_mode() throughout (faster than no_grad).
-* torch.compile(mode="max-autotune") on CUDA.
+* torch.compile() on CUDA.
 * Dedicated CUDA warmup pass to prime JIT kernels.
 * Zero-compute orientation gate (pure Python, no GPU hit).
 
@@ -101,8 +101,8 @@ class UnifiedCLIPAnalyzer:
         # torch.compile — JIT for extra throughput on GPU (PyTorch 2.0+)
         if self.use_gpu:
             try:
-                self.model = torch.compile(self.model, mode="max-autotune")
-                print("[CLIP] torch.compile(max-autotune) applied.", flush=True)
+                self.model = torch.compile(self.model)
+                print("[CLIP] torch.compile(default) applied.", flush=True)
             except Exception as exc:
                 print(f"[CLIP] torch.compile() skipped: {exc}", flush=True)
 

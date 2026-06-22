@@ -166,10 +166,10 @@ class DLPipeline:
         # torch.compile() — JIT-compile models for 20-50% faster inference (PyTorch 2.0+, Linux GPU only)
         if self.use_gpu:
             try:
-                self.embedding_model = torch.compile(self.embedding_model, mode="max-autotune")
-                if self.spoof_model is not None:
-                    self.spoof_model = torch.compile(self.spoof_model, mode="max-autotune")
-                print("torch.compile() applied to fixed-shape PyTorch models (max-autotune mode).")
+                self.embedding_model = torch.compile(self.embedding_model)
+                if self.spoof_model:
+                    self.spoof_model = torch.compile(self.spoof_model)
+                print("torch.compile() applied to fixed-shape PyTorch models (default mode).")
             except Exception as compile_err:
                 print(f"torch.compile() not available, continuing without it: {compile_err}")
 
