@@ -184,7 +184,20 @@ class UnifiedCLIPAnalyzer:
         with torch.no_grad():
             # Disable autocast so text encoding stays in FP32
             with torch.amp.autocast(device_type=device, enabled=False):
-                txt_feats = self.model.get_text_features(**txt_inputs).float()
+                txt_out = self.model.get_text_features(**txt_inputs)
+                if hasattr(txt_out, "text_embeds") and txt_out.text_embeds is not None:
+                    txt_feats = txt_out.text_embeds
+                elif hasattr(txt_out, "pooler_output"):
+                    # Some versions/compilations of transformers return the base output
+                    # and skip the projection layer in get_text_features
+                    if hasattr(self.model, "text_projection") and self.model.text_projection is not None:
+                        txt_feats = self.model.text_projection(txt_out.pooler_output)
+                    else:
+                        txt_feats = txt_out.pooler_output
+                else:
+                    txt_feats = txt_out
+                    
+                txt_feats = txt_feats.float()
 
         self.text_features: torch.Tensor = txt_feats / txt_feats.norm(
             dim=-1, keepdim=True
