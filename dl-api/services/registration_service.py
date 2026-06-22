@@ -201,14 +201,14 @@ async def _process_registration_impl(payload: dict, upload_tasks: list, notify_w
 
                     res.update({"muzzle_crop": _m_crop, "face_crop": _f_crop, "face_muzzle_crop": _fm_crop, "face_from_muzzle_crop": _ffm_crop, "muzzle_conf": _m_conf, "face_conf": _f_conf, "face_muzzle_conf": _fm_conf})
                     
-                    face_pil_primary = Image.fromarray(cv2.cvtColor(_f_crop["raw"], cv2.COLOR_BGR2RGB)) if _f_crop else None
-                    face_pil_secondary = Image.fromarray(cv2.cvtColor(_ffm_crop["raw"], cv2.COLOR_BGR2RGB)) if _ffm_crop else None
+                    clip_primary = Image.fromarray(cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)) if face_img is not None else None
+                    clip_secondary = Image.fromarray(cv2.cvtColor(muzzle_img, cv2.COLOR_BGR2RGB)) if muzzle_img is not None else None
 
-                    clip_primary = face_pil_primary or face_pil_secondary
-                    clip_secondary = face_pil_secondary if face_pil_primary is not None else None
+                    clip_main = clip_primary or clip_secondary
+                    clip_sub = clip_secondary if clip_primary is not None else None
 
-                    if clip_primary is not None:
-                        clip_result = glb.dl.clip_analyzer.analyze_face_crops(clip_primary, clip_secondary)
+                    if clip_main is not None:
+                        clip_result = glb.dl.clip_analyzer.analyze_face_crops(clip_main, clip_sub)
                         if clip_result["status"] == "PASS":
                             res["clip_semantic_tags"] = clip_result["metadata_payload"]
                         else:
