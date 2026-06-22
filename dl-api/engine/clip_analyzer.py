@@ -318,17 +318,6 @@ class UnifiedCLIPAnalyzer:
         Pass  : {"status": "PASS",   "metadata_payload": {"semantic_color": ..., ...}}
         Reject: {"status": "REJECT", "reason": "<REJECT_CODE>"}
         """
-        # ── Zero-cost orientation gate — primary (no GPU) ──────────────────────
-        w, h = primary_pil.size
-        if w > h:
-            return {"status": "REJECT", "reason": "REJ_QA_INVALID_ORIENTATION"}
-
-        # ── Zero-cost orientation gate — secondary (no GPU) ───────────────────
-        if secondary_pil is not None:
-            w2, h2 = secondary_pil.size
-            if w2 > h2:
-                return {"status": "REJECT", "reason": "REJ_QA_INVALID_ORIENTATION"}
-
         # ── Batched GPU forward pass ───────────────────────────────────────────
         images_to_encode = [primary_pil]
         if secondary_pil is not None:

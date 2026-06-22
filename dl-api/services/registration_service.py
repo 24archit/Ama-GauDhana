@@ -160,6 +160,14 @@ async def _process_registration_impl(payload: dict, upload_tasks: list, notify_w
                 "effective_face_crop": None, "muzzle_superpoint_cache": None, "face_muzzle_superpoint_cache": None
             }
 
+            # Enforce strictly Portrait mode photos for original uploads
+            for img in [muzzle_img, face_img]:
+                if img is not None:
+                    h, w = img.shape[:2]
+                    if w > h:
+                        res["clip_reject_reason"] = "REJ_QA_INVALID_ORIENTATION"
+                        return res
+
             with glb.gpu_lock:
                 with torch.inference_mode(), torch.amp.autocast('cuda'):
                     cow_res = glb.dl.are_images_cows([muzzle_img, face_img])
